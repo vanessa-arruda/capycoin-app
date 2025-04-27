@@ -3,7 +3,8 @@
 Gamified financial education for kids to help them save money and have control of it in a gamefied way.
 the activities will be chores and plays that will give them points that can be exchanged by rewards set by their parents.
 
-## parents accounts:
+## Parents accounts
+
 - sets how many kids account will be related to their account (and approve the link after the kid creates profile - using email)
 - sets points value for each activity
 - sets which activities they turn available from the existent list available
@@ -12,7 +13,8 @@ the activities will be chores and plays that will give them points that can be e
 - see the board with all current available activity
 - see how many points and which activities the kids have right now.
 
-## child accounts:
+## Child accounts
+
 - child receives an invite to create their profile as kid (with their name, email and a capybara avatar)
 - can list all available activities
 - can choose which activity they wanna pick up
@@ -31,10 +33,10 @@ make dev
 ```
 
 ## first steps
-Step	What
-1	    Set up  FastAPI app and simple hello world route
-2	    Set up  database connection (SQLAlchemy + Supabase/PostgreSQL)
-3	    Set up  configuration loader (.env variables)
-4	    Set up  basic models (Parent, Child, Activity)
-5	    Set up  basic API routers (like /parent, /child)
-6	    Make simple Pydantic schemas (for request/response)
+
+- 1 - Set up  FastAPI app and simple hello world route;
+- 2 - Set up  database connection (SQLAlchemy + Supabase/PostgreSQL);
+- 3 - Set up  configuration loader (.env variables);
+- 4 - Set up  basic models (Parent, Child, Activity);
+- 5 - Set up  basic API routers (like /parent, /child);
+- 6 - Make simple Pydantic schemas (for request/response)
