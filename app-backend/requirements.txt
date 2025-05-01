@@ -15,6 +15,7 @@ passlib==1.7.4
 pyasn1==0.4.8
 pydantic==2.11.3
 pydantic_core==2.33.1
+pydantic-settings==0.2.0
 python-dotenv==1.1.0
 python-jose==3.4.0
 rsa==4.9.1
