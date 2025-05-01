@@ -11,4 +11,6 @@ class Child(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     parent_id = Column(Integer, ForeignKey("parents.id"))
 
+    household_id = Column(Integer, ForeignKey("households.id"))
+
     parent = relationship("Parent", back_populates="children")

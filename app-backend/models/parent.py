@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from core.database import Base
 
@@ -11,5 +11,8 @@ class Parent(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
 
-    children = relationship("Child", back_populates="parent")
-    activity_links = relationship("ParentActivity", backref="parent")
+    household_id = Column(Integer, ForeignKey("households.id"))
+
+    household = relationship("Household", back_populates="parents")
+    children = relationship("Child", back_populates="parent", overlaps="household")
+    activities = relationship("Activity", back_populates="parent", overlaps="household")
