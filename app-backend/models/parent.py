@@ -12,3 +12,4 @@ class Parent(Base):
     password_hash = Column(String, nullable=False)
 
     children = relationship("Child", back_populates="parent")
+    activity_links = relationship("ParentActivity", backref="parent")

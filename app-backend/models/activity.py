@@ -10,3 +10,4 @@ class Activity(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     default_points = Column(Integer, default=0)
+    parent_links = relationship("ParentActivity", backref="activity")
