@@ -11,5 +11,7 @@ class Activity(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     default_points = Column(Integer, default=0)
-    created_at = Column(DateTime, nullable=True, default=datetime.now)
-    parent_links = relationship("ParentActivity", backref="activity")
+    category = Column(String, nullable=False, default="chore")
+    created_at = Column(DateTime, default=datetime.now)
+
+    parent_links = relationship("ParentActivity", back_populates="activity")

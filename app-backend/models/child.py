@@ -9,8 +9,12 @@ class Child(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    avatar = Column(String, default="capybara_default")
     parent_id = Column(Integer, ForeignKey("parents.id"))
-
     household_id = Column(Integer, ForeignKey("households.id"))
 
     parent = relationship("Parent", back_populates="children")
+    household = relationship("Household", back_populates="children")
+    activities = relationship("ChildActivity", back_populates="child")
+    rewards = relationship("ChildReward", back_populates="child")

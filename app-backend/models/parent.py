@@ -14,5 +14,5 @@ class Parent(Base):
     household_id = Column(Integer, ForeignKey("households.id"))
 
     household = relationship("Household", back_populates="parents")
-    children = relationship("Child", back_populates="parent", overlaps="household")
-    activities = relationship("Activity", back_populates="parent", overlaps="household")
+    children = relationship("Child", back_populates="parent")
+    parent_activities = relationship("ParentActivity", back_populates="parent")

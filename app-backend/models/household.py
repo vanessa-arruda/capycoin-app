@@ -11,3 +11,4 @@ class Household(Base):
 
     parents = relationship("Parent", back_populates="household")
     children = relationship("Child", back_populates="household")
+    rewards = relationship("Reward", back_populates="household")
