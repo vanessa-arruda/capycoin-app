@@ -16,6 +16,10 @@ venv/
 # Test database
 *.db
 
+# Next.js
+app-frontend/.next/
+app-frontend/node_modules/
+
 # Others
 .DS_Store
 .idea/

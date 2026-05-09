@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npx create-next-app@latest *)",
+      "Bash(npx create-next-app@14 *)"
+    ]
+  }
+}
