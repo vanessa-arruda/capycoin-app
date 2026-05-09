@@ -3,6 +3,8 @@
 Gamified financial education for kids to help them save money and have control of it in a gamefied way.
 the activities will be chores and plays that will give them points that can be exchanged by rewards set by their parents.
 
+version: 0.1.0
+
 ## Parents accounts
 
 - sets how many kids account will be related to their account (and approve the link after the kid creates profile - using email)
@@ -12,6 +14,15 @@ the activities will be chores and plays that will give them points that can be e
 - sets the period for how long each activity is available for conclusion (like temporary quests in a game) and how many times they can do that activity per day/week/month.
 - see the board with all current available activity
 - see how many points and which activities the kids have right now.
+
+### Models
+
+- Parent
+- Child
+- Activity
+- ParentActivity
+- ChildActivity (tbd)
+- Reward(tbd)
 
 ## Child accounts
 
