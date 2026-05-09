@@ -9,7 +9,7 @@ from schemas.activity import (
     ActivityCreate, ActivityRead,
     ParentActivityConfig, ParentActivityRead,
     ChildActivityCreate, ChildActivityRead,
-    ReviewRequest,
+    ReviewRequest, PendingReviewRead,
 )
 
 router = APIRouter(tags=["activities"])
@@ -82,6 +82,32 @@ def disable_activity(
     db.commit()
     db.refresh(pa)
     return pa
+
+
+@router.get("/child-activities/pending", response_model=list[PendingReviewRead])
+def get_pending_reviews(
+    current_parent: Parent = Depends(get_current_parent),
+    db: Session = Depends(get_db),
+):
+    child_ids = [c.id for c in current_parent.children]
+    pending = (
+        db.query(ChildActivity)
+        .filter(
+            ChildActivity.child_id.in_(child_ids),
+            ChildActivity.status == ActivityStatus.pending,
+            ChildActivity.submitted_at.isnot(None),
+        )
+        .all()
+    )
+    return [
+        PendingReviewRead(
+            id=ca.id,
+            child_name=ca.child.name,
+            activity_name=ca.activity.name,
+            submitted_at=ca.submitted_at,
+        )
+        for ca in pending
+    ]
 
 
 @router.post("/child-activities", response_model=ChildActivityRead, status_code=201)

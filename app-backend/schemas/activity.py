@@ -57,3 +57,10 @@ class ChildActivityRead(BaseModel):
 
 class ReviewRequest(BaseModel):
     status: str  # APPROVED or REJECTED
+
+
+class PendingReviewRead(BaseModel):
+    id: int
+    child_name: str
+    activity_name: str
+    submitted_at: datetime

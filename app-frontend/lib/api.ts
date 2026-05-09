@@ -61,12 +61,17 @@ export const createReward = (data: object) =>
   request("/rewards", { method: "POST", body: JSON.stringify(data) });
 export const redeemReward = (rewardId: number) =>
   request(`/rewards/${rewardId}/redeem`, { method: "POST" });
+
+// Pending reviews (child activities awaiting approval)
+export const getPendingReviews = () =>
+  request<{ id: number; child_name: string; activity_name: string; submitted_at: string }[]>("/child-activities/pending");
+
+// Parent-specific
+export const getParentActivities = () => request("/parents/me/activities");
+export const getParentRewards = () => request("/parents/me/rewards");
+export const getPendingRedemptions = () => request("/parents/me/redemptions/pending");
 export const reviewRedemption = (redemptionId: number, status: "APPROVED" | "REJECTED") =>
   request(`/rewards/redemptions/${redemptionId}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
-
-// Pending reviews (child activities awaiting approval)
-export const getPendingReviews = () =>
-  request<{ id: number; child_name: string; activity_name: string }[]>("/child-activities/pending");

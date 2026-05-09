@@ -30,3 +30,11 @@ class RedemptionRead(BaseModel):
 
 class RedemptionReview(BaseModel):
     status: str  # APPROVED or REJECTED
+
+
+class PendingRedemptionRead(BaseModel):
+    id: int
+    child_name: str
+    reward_name: str
+    points_cost: int
+    redeemed_at: datetime
