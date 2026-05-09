@@ -20,6 +20,27 @@ def list_activities(db: Session = Depends(get_db)):
     return db.query(Activity).all()
 
 
+@router.get("/activities/available", response_model=list[ActivityRead])
+def list_available_activities(
+    db: Session = Depends(get_db),
+    current_child: Child = Depends(get_current_child),
+):
+    if not current_child.household_id:
+        return []
+    parent_ids = [
+        row[0]
+        for row in db.query(Parent.id).filter(Parent.household_id == current_child.household_id).all()
+    ]
+    activity_ids = [
+        row[0]
+        for row in db.query(ParentActivity.activity_id)
+        .filter(ParentActivity.parent_id.in_(parent_ids), ParentActivity.is_active == True)
+        .distinct()
+        .all()
+    ]
+    return db.query(Activity).filter(Activity.id.in_(activity_ids)).all()
+
+
 @router.post("/activities", response_model=ActivityRead, status_code=201)
 def create_activity(
     payload: ActivityCreate,

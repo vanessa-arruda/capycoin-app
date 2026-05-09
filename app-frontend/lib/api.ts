@@ -39,6 +39,7 @@ export const getChildRewards = () => request("/children/me/rewards");
 
 // Activities
 export const getActivities = () => request("/activities");
+export const getAvailableActivities = () => request("/activities/available");
 export const createActivity = (data: object) =>
   request("/activities", { method: "POST", body: JSON.stringify(data) });
 export const enableActivity = (id: number, config: object) =>
