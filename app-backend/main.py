@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers import auth, parents, children, activities, rewards
 
 app = FastAPI(
     title="Capycoin API",
@@ -14,6 +15,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+app.include_router(parents.router)
+app.include_router(children.router)
+app.include_router(activities.router)
+app.include_router(rewards.router)
 
 
 @app.get("/")

@@ -13,9 +13,10 @@ def get_level(points: int) -> int:
 
 
 def get_child_points(child_id: int, db: Session) -> int:
-    from models import ChildActivity
+    from models import ChildActivity, ChildReward, ParentActivity
     from models.child_activity import ActivityStatus
-    rows = (
+
+    approved_activities = (
         db.query(ChildActivity)
         .filter(
             ChildActivity.child_id == child_id,
@@ -23,19 +24,24 @@ def get_child_points(child_id: int, db: Session) -> int:
         )
         .all()
     )
-    total = 0
-    for row in rows:
-        pa = _get_parent_activity(row, db)
-        total += pa.points_override if (pa and pa.points_override) else (
+
+    earned = 0
+    for row in approved_activities:
+        pa = db.query(ParentActivity).filter(
+            ParentActivity.activity_id == row.activity_id
+        ).first()
+        earned += pa.points_override if (pa and pa.points_override) else (
             row.activity.default_points if row.activity else 0
         )
-    return total
 
-
-def _get_parent_activity(child_activity, db):
-    from models import ParentActivity
-    return (
-        db.query(ParentActivity)
-        .filter(ParentActivity.activity_id == child_activity.activity_id)
-        .first()
+    approved_redemptions = (
+        db.query(ChildReward)
+        .filter(
+            ChildReward.child_id == child_id,
+            ChildReward.status == "APPROVED",
+        )
+        .all()
     )
+    spent = sum(r.reward.points_cost for r in approved_redemptions if r.reward)
+
+    return max(0, earned - spent)
