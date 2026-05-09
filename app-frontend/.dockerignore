@@ -1,0 +1,6 @@
+node_modules/
+.next/
+__tests__/
+*.test.tsx
+*.test.ts
+.env*.local

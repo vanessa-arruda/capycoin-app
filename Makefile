@@ -1,3 +1,4 @@
+# Dev
 up:
 	docker compose up
 
@@ -27,3 +28,19 @@ format:
 
 lint:
 	cd app-backend && flake8 .
+
+# Production
+prod-build:
+	docker compose -f docker-compose.prod.yml build
+
+prod-up:
+	docker compose -f docker-compose.prod.yml up -d
+
+prod-down:
+	docker compose -f docker-compose.prod.yml down
+
+prod-migrate:
+	docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+
+prod-logs:
+	docker compose -f docker-compose.prod.yml logs -f
