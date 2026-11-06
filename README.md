@@ -27,6 +27,8 @@ the activities will be chores and plays that will give them points that can be e
 
 ## How to run
 
+Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.13 and the dependencies into `app-backend/.venv`.
+
 ```bash
 make install
 make dev

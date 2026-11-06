@@ -1,11 +1,13 @@
-install:
-	pip install -r requirements.txt
+BACKEND := uv run --directory app-backend
 
-dev:
-	uvicorn app.main:app --reload
+be-install:
+	uv sync --directory app-backend
 
-format:
-	black .
+be-dev:
+	$(BACKEND) uvicorn main:app --reload
 
-lint:
-	flake8 .
+be-format:
+	$(BACKEND) black .
+
+be-lint:
+	$(BACKEND) flake8 .
