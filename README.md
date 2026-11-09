@@ -30,9 +30,12 @@ the activities will be chores and plays that will give them points that can be e
 Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.15 and the dependencies into `app-backend/.venv`.
 
 ```bash
-make install
-make dev
+make be-install
+make be-migrate
+make be-dev
 ```
+
+`make be-migrate` needs a `.env` at the repo root with the database settings (`username`, `password`, `host`, `port`, `dbname`). See [docs/database.md](docs/database.md) for the data model.
 
 ## first steps
 

@@ -11,3 +11,6 @@ be-format:
 
 be-lint:
 	$(BACKEND) flake8 .
+
+be-migrate:
+	$(BACKEND) alembic upgrade head
