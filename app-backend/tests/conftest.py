@@ -10,6 +10,8 @@ os.environ.update(
     dbname="capycoin_test",
 )
 
+import re  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
@@ -20,9 +22,15 @@ from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from api.deps import get_db  # noqa: E402
+from core import clock  # noqa: E402
 from core.config import settings  # noqa: E402
 from core.database import engine  # noqa: E402
+from core.email import get_email_sender  # noqa: E402
+from core.security import hash_secret  # noqa: E402
 from main import app  # noqa: E402
+from models import User  # noqa: E402
+from models.enums import UserRole  # noqa: E402
+from services.auth import create_session  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -70,3 +78,68 @@ def client(db):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+class Outbox:
+    """Email sender that keeps messages instead of sending them."""
+
+    def __init__(self):
+        self.messages = []
+
+    def send(self, message) -> None:
+        self.messages.append(message)
+
+    def last_code(self) -> str:
+        return re.search(r"\b(\d{6})\b", self.messages[-1].body).group(1)
+
+
+@pytest.fixture
+def outbox():
+    outbox = Outbox()
+    app.dependency_overrides[get_email_sender] = lambda: outbox
+    yield outbox
+    app.dependency_overrides.pop(get_email_sender, None)
+
+
+class FakeClock:
+    def __init__(self, start: datetime):
+        self.current = start
+
+    def now(self) -> datetime:
+        return self.current
+
+    def advance(self, **delta) -> None:
+        self.current += timedelta(**delta)
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch):
+    fake = FakeClock(datetime.now(UTC))
+    monkeypatch.setattr(clock, "now", fake.now)
+    return fake
+
+
+@pytest.fixture
+def make_user(db):
+    def make(role=UserRole.PARENT, password=None, **fields) -> User:
+        user = User(
+            role=role,
+            display_name=fields.pop("display_name", "Someone"),
+            password_hash=hash_secret(password) if password else None,
+            **fields,
+        )
+        db.add(user)
+        db.commit()
+        return user
+
+    return make
+
+
+@pytest.fixture
+def auth_headers(db):
+    def headers(user: User) -> dict[str, str]:
+        new_session = create_session(db, user)
+        db.commit()
+        return {"Authorization": f"Bearer {new_session.token}"}
+
+    return headers

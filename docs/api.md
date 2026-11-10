@@ -2,7 +2,7 @@
 
 This document describes the Capycoin backend API: how users sign up and log in, how sessions work, who can do what, and every endpoint for the parents' features. The data model behind it is in [database.md](database.md).
 
-**Status:** the API is being built in steps. Only `GET /health` exists today. Everything else in this document is the agreed design; update the status column as endpoints are implemented.
+**Status:** the API is being built in steps. The status column of each endpoint table says what exists today. Everything else in this document is the agreed design; update the status column as endpoints are implemented.
 
 ## Conventions
 
@@ -126,7 +126,7 @@ sequenceDiagram
 - `login` is an email or a username. Both are matched in lowercase.
 - Every failure gives the same 401 message, so it does not reveal which accounts exist or which ones have a password.
 - Passwords are hashed with Argon2 (`pwdlib`). They must be 8 to 128 characters.
-- Repeated failures are rate limited per login and per IP address (429).
+- Repeated failures will be rate limited per login and per IP address (429). Not implemented yet; planned for the hardening step.
 
 ### Sessions
 
@@ -194,10 +194,10 @@ Emails (codes and invitations) go through the `EmailSender` interface in `app-ba
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| POST | `/auth/otp/request` | anyone | planned |
-| POST | `/auth/otp/verify` | anyone | planned |
-| POST | `/auth/login` | anyone | planned |
-| POST | `/auth/logout` | logged in | planned |
+| POST | `/auth/otp/request` | anyone | implemented |
+| POST | `/auth/otp/verify` | anyone | implemented |
+| POST | `/auth/login` | anyone | implemented |
+| POST | `/auth/logout` | logged in | implemented |
 
 - `POST /auth/otp/request` `{email}` → `202`.
 - `POST /auth/otp/verify` `{email, code, display_name?}` → `200` (login) or `201` (new parent account) with `{token, expires_at, user}`. `401` for a wrong or expired code, `422` if the account does not exist and `display_name` is missing.
@@ -208,15 +208,15 @@ Emails (codes and invitations) go through the `EmailSender` interface in `app-ba
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/me` | logged in | planned |
-| PATCH | `/me` | logged in | planned |
-| PUT | `/me/password` | logged in | planned |
+| GET | `/me` | logged in | implemented |
+| PATCH | `/me` | logged in | implemented |
+| PUT | `/me/password` | logged in | implemented |
 | GET | `/me/households` | logged in | planned |
 | GET | `/me/notification-preferences` | logged in | planned |
 | PUT | `/me/notification-preferences` | logged in | planned |
 
-- `PATCH /me` `{display_name?, username?}`. `409` if the username is taken. Changing the email is not supported yet.
-- `PUT /me/password` `{current_password?, new_password}` → `204`. `current_password` is required when a password is already set. Revokes the user's other sessions.
+- `PATCH /me` `{display_name?, username?}`. Omitted fields are unchanged; `"username": null` removes the username (`422` if the user has no email, since they could no longer log in). Usernames are 3 to 50 characters of `a-z 0-9 _ . -` and are stored in lowercase. `409` if the username is taken. Changing the email is not supported yet.
+- `PUT /me/password` `{current_password?, new_password}` → `204`. `current_password` is required when a password is already set; a missing or wrong one gives `422`. Revokes the user's other sessions.
 - `GET /me/households` → the households the user belongs to, with their role and whether they are admin.
 - `GET /me/notification-preferences` → every notification type and channel with its effective `enabled` value (defaults included). `PUT` takes `{preferences: [{type, channel, enabled}]}`.
 

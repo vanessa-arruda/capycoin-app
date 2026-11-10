@@ -1,10 +1,14 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, CreatedAt, UUIDPrimaryKey
+
+if TYPE_CHECKING:
+    from .user import User
 
 
 class OtpCode(UUIDPrimaryKey, CreatedAt, Base):
@@ -32,3 +36,5 @@ class UserSession(UUIDPrimaryKey, CreatedAt, Base):
     expires_at: Mapped[datetime]
     last_used_at: Mapped[datetime]
     revoked_at: Mapped[datetime | None]
+
+    user: Mapped[User] = relationship()

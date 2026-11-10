@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 
-from api.routers import health
+from api.routers import auth, health, me
+from core.errors import AppError, handle_app_error
 
 app = FastAPI(
     title="Capycoin API",
     description="Backend API for Capycoin kids financial app",
     version="0.1.0",
 )
+app.add_exception_handler(AppError, handle_app_error)
 
 
 @app.get("/")
@@ -15,3 +17,5 @@ async def root():
 
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(me.router)
