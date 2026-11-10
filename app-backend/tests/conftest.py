@@ -18,11 +18,13 @@ import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from pwdlib import PasswordHash  # noqa: E402
+from pwdlib.hashers.argon2 import Argon2Hasher  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from api.deps import get_db  # noqa: E402
-from core import clock  # noqa: E402
+from core import clock, security  # noqa: E402
 from core.config import settings  # noqa: E402
 from core.database import engine  # noqa: E402
 from core.email import get_email_sender  # noqa: E402
@@ -47,6 +49,15 @@ def _create_test_database() -> None:
         if not exists:
             connection.execute(text(f'CREATE DATABASE "{settings.dbname}"'))
     admin.dispose()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fast_hashing():
+    """Cheap Argon2 settings; the real ones take about 40 ms per hash."""
+    original = security._hasher
+    security._hasher = PasswordHash((Argon2Hasher(time_cost=1, memory_cost=1024),))
+    yield
+    security._hasher = original
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -345,15 +345,17 @@ Without this check a parent could set an address they don't own, and its owner w
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/households/{hid}/prizes` | parent | planned |
-| POST | `/households/{hid}/prizes` | parent | planned |
-| GET | `/households/{hid}/prizes/{prize_id}` | parent | planned |
-| PATCH | `/households/{hid}/prizes/{prize_id}` | parent | planned |
-| DELETE | `/households/{hid}/prizes/{prize_id}` | parent | planned |
+| GET | `/households/{hid}/prizes` | parent | implemented |
+| POST | `/households/{hid}/prizes` | parent | implemented |
+| GET | `/households/{hid}/prizes/{prize_id}` | parent | implemented |
+| PATCH | `/households/{hid}/prizes/{prize_id}` | parent | implemented |
+| DELETE | `/households/{hid}/prizes/{prize_id}` | parent | implemented |
 
-- `POST` `{name, description?, cost}` → `201`. `cost > 0`.
-- `PATCH` takes the same fields, all optional. A new `cost` does not change pending claims, which keep the cost from when they were made.
-- `DELETE` archives the prize (`204`). Pending claims can still be reviewed.
+- `POST` `{name, description?, cost}` → `201`. `cost` is 1 to 1,000,000.
+- Prize responses are `{id, name, description, cost, archived_at, created_by, created_at, updated_at}`.
+- `GET` list is paginated, newest first. Filter: `?archived=true|false` (default `false`).
+- `PATCH` takes the same fields, all optional. `null` clears `description`; for `name` or `cost` it gives `422`. A new `cost` does not change pending claims, which keep the cost from when they were made. Archived prizes cannot be changed (`409`).
+- `DELETE` archives the prize (`204`, also when it is already archived). Pending claims can still be reviewed.
 
 ### Approvals
 

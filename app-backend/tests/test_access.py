@@ -9,7 +9,7 @@ import pytest
 from core import clock
 from core.security import hash_token, new_token
 from main import app
-from models import HouseholdInvitation, Task
+from models import HouseholdInvitation, Prize, Task
 from models.enums import UserRole
 
 
@@ -54,6 +54,11 @@ ROUTES = {
     ("GET", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
     ("PATCH", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
     ("DELETE", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
+    ("GET", "/households/{household_id}/prizes"): Access.PARENT,
+    ("POST", "/households/{household_id}/prizes"): Access.PARENT,
+    ("GET", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
+    ("PATCH", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
+    ("DELETE", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
 }
 
 HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
@@ -94,6 +99,13 @@ def make_task(db, household):
     return task
 
 
+def make_prize(db, household):
+    prize = Prize(household_id=household.id, name="Ice cream", cost=5)
+    db.add(prize)
+    db.commit()
+    return prize
+
+
 @pytest.fixture
 def home(db, make_user, make_household, auth_headers):
     """A household with each kind of caller, and an outsider with their own.
@@ -114,6 +126,7 @@ def home(db, make_user, make_household, auth_headers):
         "invitation_id": invite(db, household, "new@example.com").id,
         "kid_id": kid.id,
         "task_id": make_task(db, household).id,
+        "prize_id": make_prize(db, household).id,
     }
     foreign_ids = {
         "household_id": household.id,
@@ -121,6 +134,7 @@ def home(db, make_user, make_household, auth_headers):
         "invitation_id": invite(db, other, "new@example.com").id,
         "kid_id": other_kid.id,
         "task_id": make_task(db, other).id,
+        "prize_id": make_prize(db, other).id,
     }
     return {
         "ids": ids,
