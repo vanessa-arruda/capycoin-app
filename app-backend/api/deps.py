@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Iterator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from core.database import SessionLocal
 from core.errors import Forbidden, NotFound, Unauthorized
 from models import HouseholdMember, User, UserSession
 from models.enums import UserRole
+from schemas.common import PageParams
 from services import auth
 
 HOUSEHOLD_NOT_FOUND = "Household not found"
@@ -97,3 +98,12 @@ def household_router(path: str = "", **kwargs: Any) -> APIRouter:
         dependencies=[Depends(get_membership)],
         **kwargs,
     )
+
+
+def get_page_params(
+    before: uuid.UUID | None = None, limit: Annotated[int, Query(ge=1, le=100)] = 50
+) -> PageParams:
+    return PageParams(before=before, limit=limit)
+
+
+Pagination = Annotated[PageParams, Depends(get_page_params)]

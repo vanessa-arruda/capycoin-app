@@ -1,7 +1,7 @@
 """Who can call each route. Every route must be listed in ROUTES."""
 
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 from enum import StrEnum
 
 import pytest
@@ -9,7 +9,7 @@ import pytest
 from core import clock
 from core.security import hash_token, new_token
 from main import app
-from models import HouseholdInvitation
+from models import HouseholdInvitation, Task
 from models.enums import UserRole
 
 
@@ -49,6 +49,11 @@ ROUTES = {
     ("GET", "/households/{household_id}/kids/{kid_id}"): Access.PARENT,
     ("PATCH", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,
     ("DELETE", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,
+    ("GET", "/households/{household_id}/tasks"): Access.PARENT,
+    ("POST", "/households/{household_id}/tasks"): Access.PARENT,
+    ("GET", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
+    ("PATCH", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
+    ("DELETE", "/households/{household_id}/tasks/{task_id}"): Access.PARENT,
 }
 
 HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
@@ -80,6 +85,15 @@ def invite(db, household, email):
     return invitation
 
 
+def make_task(db, household):
+    task = Task(
+        household_id=household.id, title="Dishes", reward=5, starts_on=date.today()
+    )
+    db.add(task)
+    db.commit()
+    return task
+
+
 @pytest.fixture
 def home(db, make_user, make_household, auth_headers):
     """A household with each kind of caller, and an outsider with their own.
@@ -99,12 +113,14 @@ def home(db, make_user, make_household, auth_headers):
         "user_id": parent.id,
         "invitation_id": invite(db, household, "new@example.com").id,
         "kid_id": kid.id,
+        "task_id": make_task(db, household).id,
     }
     foreign_ids = {
         "household_id": household.id,
         "user_id": outsider.id,
         "invitation_id": invite(db, other, "new@example.com").id,
         "kid_id": other_kid.id,
+        "task_id": make_task(db, other).id,
     }
     return {
         "ids": ids,

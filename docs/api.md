@@ -10,7 +10,7 @@ This document describes the Capycoin backend API: how users sign up and log in, 
 - **Format:** JSON request and response bodies.
 - **Authentication:** every endpoint except the public auth endpoints needs an `Authorization: Bearer <session token>` header.
 - **IDs:** UUIDs (version 7, ordered by creation time).
-- **Times:** moments are ISO 8601 in UTC, for example `2026-11-10T09:30:00Z`; requests may send any offset. Calendar days (such as a task's `starts_on`) are `YYYY-MM-DD` in the household's timezone. See [Times and dates](database.md#times-and-dates).
+- **Times:** moments are ISO 8601 in UTC, for example `2026-11-10T09:30:00Z`; requests must include an offset (`Z` or `+01:00`), or get `422`. Calendar days (such as a task's `starts_on`) are `YYYY-MM-DD` in the household's timezone. See [Times and dates](database.md#times-and-dates).
 - **Pagination:** list endpoints that can grow return `{"items": [...], "next_before": "<id or null>"}`. Pass `?before=<next_before>&limit=<n>` to get the next page. `limit` defaults to 50, maximum 100.
 - **Errors:** `{"detail": "<message>"}`, with these status codes:
 
@@ -326,16 +326,20 @@ Without this check a parent could set an address they don't own, and its owner w
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/households/{hid}/tasks` | parent | planned |
-| POST | `/households/{hid}/tasks` | parent | planned |
-| GET | `/households/{hid}/tasks/{task_id}` | parent | planned |
-| PATCH | `/households/{hid}/tasks/{task_id}` | parent | planned |
-| DELETE | `/households/{hid}/tasks/{task_id}` | parent | planned |
+| GET | `/households/{hid}/tasks` | parent | implemented |
+| POST | `/households/{hid}/tasks` | parent | implemented |
+| GET | `/households/{hid}/tasks/{task_id}` | parent | implemented |
+| PATCH | `/households/{hid}/tasks/{task_id}` | parent | implemented |
+| DELETE | `/households/{hid}/tasks/{task_id}` | parent | implemented |
 
-- `POST` `{title, description?, reward, recurrence, starts_on, due_at?, kid_ids}` → `201`. `reward > 0`. `recurrence` is `none`, `daily`, `weekly` or `monthly`. For one-off tasks `due_at` is the deadline; for recurring tasks it is when they stop repeating. Every id in `kid_ids` must be a kid of this household (`422` otherwise).
-- `GET` list filters: `?kid_id=`, `?archived=true|false` (default `false`).
-- `PATCH` takes the same fields, all optional. `kid_ids` replaces the assignment list. A new `reward` applies to submissions approved after the change.
-- `DELETE` archives the task (`204`). Archived tasks are hidden from kids; their pending submissions can still be reviewed.
+- `POST` `{title, description?, reward, recurrence?, starts_on, due_at?, kid_ids}` → `201`.
+  - `reward` is 1 to 1,000,000. `recurrence` is `none` (default), `daily`, `weekly` or `monthly`.
+  - `starts_on` is a calendar day in the household's timezone. For one-off tasks `due_at` is the deadline; for recurring tasks it is when they stop repeating. `due_at` must not fall on a day before `starts_on`, counted in the household's timezone.
+  - `kid_ids` has 1 to 50 ids, duplicates ignored. Every id must be a kid of this household (`422` otherwise).
+- Task responses are `{id, title, description, reward, recurrence, starts_on, due_at, archived_at, kid_ids, created_by, created_at, updated_at}`.
+- `GET` list is paginated, newest first. Filters: `?kid_id=`, `?archived=true|false` (default `false`).
+- `PATCH` takes the same fields, all optional. `null` clears `description` or `due_at`; for the other fields it gives `422`. `kid_ids` replaces the assignment list. A new `reward` applies to submissions approved after the change. Archived tasks cannot be changed (`409`).
+- `DELETE` archives the task (`204`, also when it is already archived). Archived tasks are hidden from kids; their pending submissions can still be reviewed.
 
 ### Prizes
 

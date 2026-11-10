@@ -41,6 +41,25 @@ def get_kid(db: Session, household_id: uuid.UUID, kid_id: uuid.UUID) -> User:
     return kid
 
 
+def check_kid_ids(
+    db: Session, household_id: uuid.UUID, kid_ids: list[uuid.UUID]
+) -> None:
+    """Raise InvalidInput unless every id is a kid of this household."""
+    found = set(
+        db.scalars(
+            select(User.id)
+            .join(HouseholdMember)
+            .where(
+                HouseholdMember.household_id == household_id,
+                User.role == UserRole.KID,
+                User.id.in_(kid_ids),
+            )
+        )
+    )
+    if found != set(kid_ids):
+        raise InvalidInput("kid_ids must all be kids of this household")
+
+
 def list_kids(db: Session, household_id: uuid.UUID) -> list[KidResponse]:
     kids = db.scalars(
         select(User)

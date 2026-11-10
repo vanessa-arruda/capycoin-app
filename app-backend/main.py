@@ -1,6 +1,15 @@
 from fastapi import FastAPI
 
-from api.routers import auth, health, households, invitations, kids, me, members
+from api.routers import (
+    auth,
+    health,
+    households,
+    invitations,
+    kids,
+    me,
+    members,
+    tasks,
+)
 from core.errors import AppError, handle_app_error
 
 app = FastAPI(
@@ -25,3 +34,4 @@ app.include_router(members.router)
 app.include_router(invitations.router)
 app.include_router(invitations.accept_router)
 app.include_router(kids.router)
+app.include_router(tasks.router)
