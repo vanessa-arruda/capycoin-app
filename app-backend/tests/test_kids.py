@@ -1,0 +1,286 @@
+from datetime import date
+
+import pytest
+from sqlalchemy import func, select
+
+from models import (
+    CreditTransaction,
+    HouseholdMember,
+    Notification,
+    Prize,
+    PrizeClaim,
+    Task,
+    TaskAssignment,
+    TaskSubmission,
+    User,
+)
+from models.enums import (
+    CreditTransactionKind,
+    NotificationType,
+    ReviewStatus,
+    UserRole,
+)
+
+
+@pytest.fixture
+def mom(make_user):
+    return make_user(email="mom@example.com")
+
+
+@pytest.fixture
+def household(mom, make_household):
+    return make_household(mom)
+
+
+@pytest.fixture
+def headers(mom, auth_headers):
+    return auth_headers(mom)
+
+
+@pytest.fixture
+def make_kid(db, make_user):
+    def make(household, username="lia", display_name="Lia"):
+        kid = make_user(
+            role=UserRole.KID,
+            username=username,
+            display_name=display_name,
+            password="kid-password",
+        )
+        db.add(HouseholdMember(household_id=household.id, user_id=kid.id))
+        db.commit()
+        return kid
+
+    return make
+
+
+def fill_wallet(db, household, kid, parent):
+    """Give the kid a rewarded task, a paid prize, a pending claim and notifications.
+
+    Balance 10 - 4 + 3 = 9, with 5 reserved by the pending claim.
+    """
+    task = Task(
+        household_id=household.id, title="Dishes", reward=10, starts_on=date.today()
+    )
+    prize = Prize(household_id=household.id, name="Ice cream", cost=4)
+    big_prize = Prize(household_id=household.id, name="Movie", cost=5)
+    db.add_all([task, prize, big_prize])
+    db.flush()
+    submission = TaskSubmission(
+        task_id=task.id,
+        kid_id=kid.id,
+        period_start=task.starts_on,
+        status=ReviewStatus.APPROVED,
+    )
+    paid = PrizeClaim(
+        prize_id=prize.id, kid_id=kid.id, cost=4, status=ReviewStatus.APPROVED
+    )
+    pending = PrizeClaim(prize_id=big_prize.id, kid_id=kid.id, cost=5)
+    db.add_all([TaskAssignment(task_id=task.id, kid_id=kid.id), submission, paid])
+    db.add(pending)
+    db.flush()
+    db.add_all(
+        [
+            CreditTransaction(
+                household_id=household.id,
+                kid_id=kid.id,
+                amount=10,
+                kind=CreditTransactionKind.TASK_REWARD,
+                task_submission_id=submission.id,
+            ),
+            CreditTransaction(
+                household_id=household.id,
+                kid_id=kid.id,
+                amount=-4,
+                kind=CreditTransactionKind.PRIZE_CLAIM,
+                prize_claim_id=paid.id,
+            ),
+            CreditTransaction(
+                household_id=household.id,
+                kid_id=kid.id,
+                amount=3,
+                kind=CreditTransactionKind.MANUAL_ADJUSTMENT,
+            ),
+            Notification(
+                recipient_id=parent.id,
+                household_id=household.id,
+                type=NotificationType.TASK_SUBMITTED,
+                task_submission_id=submission.id,
+            ),
+            Notification(
+                recipient_id=kid.id,
+                household_id=household.id,
+                type=NotificationType.TASK_APPROVED,
+                task_submission_id=submission.id,
+            ),
+        ]
+    )
+    db.commit()
+
+
+def count(db, model, **filters):
+    return db.scalar(select(func.count()).select_from(model).filter_by(**filters))
+
+
+class TestCreateKid:
+    def test_creates_a_kid_who_can_log_in(self, client, household, headers):
+        response = client.post(
+            f"/households/{household.id}/kids",
+            headers=headers,
+            json={"display_name": "Lia", "username": "Lia", "password": "kid-password"},
+        )
+
+        assert response.status_code == 201
+        assert response.json() | {"id": None} == {
+            "id": None,
+            "display_name": "Lia",
+            "username": "lia",
+            "balance": 0,
+            "reserved": 0,
+            "available": 0,
+        }
+        login = client.post(
+            "/auth/login", json={"login": "lia", "password": "kid-password"}
+        )
+        assert login.json()["user"]["role"] == "kid"
+
+    def test_username_taken(self, client, household, headers, make_user):
+        make_user(email="someone@example.com", username="lia")
+
+        response = client.post(
+            f"/households/{household.id}/kids",
+            headers=headers,
+            json={"display_name": "Lia", "username": "lia", "password": "kid-password"},
+        )
+
+        assert response.status_code == 409
+
+    def test_needs_username_and_password(self, client, household, headers):
+        response = client.post(
+            f"/households/{household.id}/kids",
+            headers=headers,
+            json={"display_name": "Lia", "username": "lia"},
+        )
+
+        assert response.status_code == 422
+
+
+class TestViewKids:
+    def test_lists_kids_with_their_balance(
+        self, client, db, household, headers, mom, make_kid
+    ):
+        lia = make_kid(household)
+        make_kid(household, username="theo", display_name="Theo")
+        fill_wallet(db, household, lia, mom)
+
+        body = client.get(f"/households/{household.id}/kids", headers=headers).json()
+
+        assert [
+            (k["display_name"], k["balance"], k["reserved"], k["available"])
+            for k in body
+        ] == [("Lia", 9, 5, 4), ("Theo", 0, 0, 0)]
+
+    def test_balance_counts_only_this_household(
+        self, client, db, household, headers, mom, make_kid, make_user, make_household
+    ):
+        lia = make_kid(household)
+        dad = make_user(email="dad@example.com")
+        fill_wallet(db, make_household(dad, lia, name="Dad's"), lia, dad)
+
+        body = client.get(
+            f"/households/{household.id}/kids/{lia.id}", headers=headers
+        ).json()
+
+        assert (body["balance"], body["reserved"]) == (0, 0)
+
+    def test_a_parent_is_not_a_kid(self, client, household, headers, mom):
+        response = client.get(
+            f"/households/{household.id}/kids/{mom.id}", headers=headers
+        )
+
+        assert response.status_code == 404
+
+
+class TestUpdateKid:
+    def test_changes_name_and_username(self, client, household, headers, make_kid):
+        lia = make_kid(household)
+
+        body = client.patch(
+            f"/households/{household.id}/kids/{lia.id}",
+            headers=headers,
+            json={"display_name": "Lia M", "username": "LiaM"},
+        ).json()
+
+        assert (body["display_name"], body["username"]) == ("Lia M", "liam")
+
+    def test_new_password_logs_the_kid_out(
+        self, client, household, headers, make_kid, auth_headers
+    ):
+        lia = make_kid(household)
+        kid_headers = auth_headers(lia)
+
+        response = client.patch(
+            f"/households/{household.id}/kids/{lia.id}",
+            headers=headers,
+            json={"password": "new-password"},
+        )
+
+        assert response.status_code == 200
+        assert client.get("/me", headers=kid_headers).status_code == 401
+        login = client.post(
+            "/auth/login", json={"login": "lia", "password": "new-password"}
+        )
+        assert login.status_code == 200
+
+    @pytest.mark.parametrize("field", ["display_name", "username", "password"])
+    def test_fields_cannot_be_null(self, client, household, headers, make_kid, field):
+        lia = make_kid(household)
+
+        response = client.patch(
+            f"/households/{household.id}/kids/{lia.id}",
+            headers=headers,
+            json={field: None},
+        )
+
+        assert response.status_code == 422
+
+
+class TestRemoveKid:
+    def test_deletes_the_kid_and_their_data(
+        self, client, db, household, headers, mom, make_kid
+    ):
+        lia = make_kid(household)
+        theo = make_kid(household, username="theo", display_name="Theo")
+        fill_wallet(db, household, lia, mom)
+        fill_wallet(db, household, theo, mom)
+        lia_id = lia.id
+
+        response = client.delete(
+            f"/households/{household.id}/kids/{lia_id}", headers=headers
+        )
+
+        assert response.status_code == 204
+        db.expire_all()
+        assert db.get(User, lia_id) is None
+        for model in (CreditTransaction, PrizeClaim, TaskSubmission, TaskAssignment):
+            assert count(db, model, kid_id=lia_id) == 0
+            assert count(db, model, kid_id=theo.id) > 0
+        # The parent's notification about Lia's submission goes too.
+        assert count(db, Notification, recipient_id=mom.id) == 1
+        assert count(db, Task) == 2
+
+    def test_keeps_the_account_and_other_household(
+        self, client, db, household, headers, mom, make_kid, make_user, make_household
+    ):
+        lia = make_kid(household)
+        dad = make_user(email="dad@example.com")
+        dads = make_household(dad, lia, name="Dad's")
+        fill_wallet(db, household, lia, mom)
+        fill_wallet(db, dads, lia, dad)
+
+        client.delete(f"/households/{household.id}/kids/{lia.id}", headers=headers)
+
+        db.expire_all()
+        assert db.get(User, lia.id) is not None
+        assert count(db, HouseholdMember, user_id=lia.id) == 1
+        assert count(db, CreditTransaction, kid_id=lia.id) == 3
+        assert count(db, CreditTransaction, household_id=household.id) == 0

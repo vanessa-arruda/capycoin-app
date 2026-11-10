@@ -15,6 +15,12 @@ def update_user(db: Session, user: User, changes: UserUpdate) -> User:
     if "username" in fields:
         user.username = changes.username
 
+    commit_user_changes(db)
+    return user
+
+
+def commit_user_changes(db: Session) -> None:
+    """Commit, turning username and login constraint errors into API errors."""
     try:
         db.commit()
     except IntegrityError as error:
@@ -24,4 +30,3 @@ def update_user(db: Session, user: User, changes: UserUpdate) -> User:
         if "ck_users_can_log_in" in str(error.orig):
             raise InvalidInput("A user without email needs a username")
         raise
-    return user

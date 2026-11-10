@@ -43,6 +43,11 @@ ROUTES = {
     ("POST", "/households/{household_id}/invitations"): Access.ADMIN,
     ("DELETE", "/households/{household_id}/invitations/{invitation_id}"): Access.ADMIN,
     ("POST", "/invitations/accept"): Access.PARENT_ACCOUNT,
+    ("GET", "/households/{household_id}/kids"): Access.PARENT,
+    ("POST", "/households/{household_id}/kids"): Access.ADMIN,
+    ("GET", "/households/{household_id}/kids/{kid_id}"): Access.PARENT,
+    ("PATCH", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,
+    ("DELETE", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,
 }
 
 HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
@@ -86,16 +91,19 @@ def home(db, make_user, make_household, auth_headers):
     kid = make_user(role=UserRole.KID, username="kid", password="x" * 8)
     outsider = make_user(email="outsider@example.com")
     household = make_household(admin, parent, kid)
-    other = make_household(outsider, name="Other home")
+    other_kid = make_user(role=UserRole.KID, username="other-kid", password="x" * 8)
+    other = make_household(outsider, other_kid, name="Other home")
     ids = {
         "household_id": household.id,
         "user_id": parent.id,
         "invitation_id": invite(db, household, "new@example.com").id,
+        "kid_id": kid.id,
     }
     foreign_ids = {
         "household_id": household.id,
         "user_id": outsider.id,
         "invitation_id": invite(db, other, "new@example.com").id,
+        "kid_id": other_kid.id,
     }
     return {
         "ids": ids,
@@ -109,8 +117,8 @@ def home(db, make_user, make_household, auth_headers):
     }
 
 
-def call(client, method, path, ids, headers=None):
-    return client.request(method, path.format(**ids), headers=headers)
+def call(client, method, path, ids, headers=None, json=None):
+    return client.request(method, path.format(**ids), headers=headers, json=json)
 
 
 def test_every_route_is_listed():
@@ -152,7 +160,10 @@ def test_unknown_household_gets_404(client, home, method, path):
     [route for route in routes(*HOUSEHOLD_LEVELS) if route.values[1].count("{") > 1],
 )
 def test_record_of_another_household_gets_404(client, home, method, path):
-    response = call(client, method, path, home["foreign_ids"], home["headers"]["admin"])
+    # A valid body, so the request gets past validation to the record lookup.
+    response = call(
+        client, method, path, home["foreign_ids"], home["headers"]["admin"], json={}
+    )
 
     assert response.status_code == 404
 
