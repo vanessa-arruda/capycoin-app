@@ -228,23 +228,24 @@ Emails (codes and invitations) go through the `EmailSender` interface in `app-ba
 | GET | `/households/{hid}` | member | implemented |
 | PATCH | `/households/{hid}` | parent | implemented |
 | DELETE | `/households/{hid}` | admin | implemented |
-| GET | `/households/{hid}/members` | parent | planned |
-| DELETE | `/households/{hid}/members/{user_id}` | admin | planned |
+| GET | `/households/{hid}/members` | parent | implemented |
+| DELETE | `/households/{hid}/members/{user_id}` | admin | implemented |
 
 - `POST /households` `{name, timezone}` → `201`. The caller becomes the admin. `timezone` must be a valid IANA name such as `Europe/Stockholm`.
 - `GET /households/{hid}` → `{id, name, timezone}`.
 - `PATCH /households/{hid}` `{name?, timezone?}`. Omitted fields are unchanged; `null` gives `422`.
 - `DELETE /households/{hid}` `{confirm_name}` → `204`. `confirm_name` must equal the household name exactly (`422` otherwise). Deletes everything in the household (see database.md).
-- `DELETE /households/{hid}/members/{user_id}` removes a **parent** from the household. The admin cannot remove themselves (`409`). Kids are removed through the kid endpoints.
+- `GET /households/{hid}/members` → `[{user_id, role, display_name, username, email, is_admin, joined_at}]`, the admin first, then parents, then kids.
+- `DELETE /households/{hid}/members/{user_id}` → `204`. Removes a **parent** from the household. The admin cannot remove themselves (`409`). Kids are removed through the kid endpoints (`422` here). `404` if the user is not a member of this household.
 
 ### Invitations
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/households/{hid}/invitations` | admin | planned |
-| POST | `/households/{hid}/invitations` | admin | planned |
-| DELETE | `/households/{hid}/invitations/{invitation_id}` | admin | planned |
-| POST | `/invitations/accept` | logged-in parent | planned |
+| GET | `/households/{hid}/invitations` | admin | implemented |
+| POST | `/households/{hid}/invitations` | admin | implemented |
+| DELETE | `/households/{hid}/invitations/{invitation_id}` | admin | implemented |
+| POST | `/invitations/accept` | logged-in parent | implemented |
 
 ```mermaid
 sequenceDiagram
@@ -269,9 +270,12 @@ sequenceDiagram
     end
 ```
 
-- `POST` `{email}` → `201`. `409` if that email already has a pending invitation or belongs to a member.
-- `GET` lists pending invitations. `DELETE` revokes a pending one (`204`).
+- `POST` `{email}` → `201 {id, email, status, expires_at, created_at}`. `409` if that email already has an open invitation or belongs to a member. An expired invitation for the same email is revoked and replaced.
+- The email links to `{app_url}/invitations/accept#token=<token>`. `app_url` is a setting (default `http://localhost:5173`). The token is in the URL fragment, which browsers do not send to servers, so it stays out of server and proxy logs. The web app reads it and calls `POST /invitations/accept`.
+- `GET` lists open invitations: pending and not expired, newest first. `DELETE` revokes a pending one (`204`); `404` if it is not pending.
+- `POST /invitations/accept` `{token}` → `200 {id, name, timezone}` of the household. `409` if the caller is already a member. Kid accounts get `403`.
 - Only the user whose email matches the invitation can accept it. Parents' emails are always verified, because parents sign up with a one-time code.
+- Sending invitations is not rate limited yet; planned for the hardening step.
 
 ### Kids and wallet
 

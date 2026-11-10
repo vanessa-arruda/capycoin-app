@@ -1,11 +1,15 @@
 """Who can call each route. Every route must be listed in ROUTES."""
 
 import uuid
+from datetime import timedelta
 from enum import StrEnum
 
 import pytest
 
+from core import clock
+from core.security import hash_token, new_token
 from main import app
+from models import HouseholdInvitation
 from models.enums import UserRole
 
 
@@ -33,6 +37,12 @@ ROUTES = {
     ("GET", "/households/{household_id}"): Access.MEMBER,
     ("PATCH", "/households/{household_id}"): Access.PARENT,
     ("DELETE", "/households/{household_id}"): Access.ADMIN,
+    ("GET", "/households/{household_id}/members"): Access.PARENT,
+    ("DELETE", "/households/{household_id}/members/{user_id}"): Access.ADMIN,
+    ("GET", "/households/{household_id}/invitations"): Access.ADMIN,
+    ("POST", "/households/{household_id}/invitations"): Access.ADMIN,
+    ("DELETE", "/households/{household_id}/invitations/{invitation_id}"): Access.ADMIN,
+    ("POST", "/invitations/accept"): Access.PARENT_ACCOUNT,
 }
 
 HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
@@ -52,17 +62,44 @@ def routes(*levels: Access) -> list:
     ]
 
 
+def invite(db, household, email):
+    invitation = HouseholdInvitation(
+        household_id=household.id,
+        email=email,
+        token_hash=hash_token(new_token()),
+        expires_at=clock.now() + timedelta(days=7),
+    )
+    db.add(invitation)
+    db.commit()
+    return invitation
+
+
 @pytest.fixture
-def home(make_user, make_household, auth_headers):
-    """A household with each kind of caller, and an outsider with their own."""
+def home(db, make_user, make_household, auth_headers):
+    """A household with each kind of caller, and an outsider with their own.
+
+    `ids` fills path placeholders with records of the household; `foreign_ids`
+    keeps the household but uses records of the outsider's household.
+    """
     admin = make_user(email="admin@example.com")
     parent = make_user(email="parent@example.com")
     kid = make_user(role=UserRole.KID, username="kid", password="x" * 8)
     outsider = make_user(email="outsider@example.com")
     household = make_household(admin, parent, kid)
-    make_household(outsider, name="Other home")
+    other = make_household(outsider, name="Other home")
+    ids = {
+        "household_id": household.id,
+        "user_id": parent.id,
+        "invitation_id": invite(db, household, "new@example.com").id,
+    }
+    foreign_ids = {
+        "household_id": household.id,
+        "user_id": outsider.id,
+        "invitation_id": invite(db, other, "new@example.com").id,
+    }
     return {
-        "household": household,
+        "ids": ids,
+        "foreign_ids": foreign_ids,
         "headers": {
             "admin": auth_headers(admin),
             "parent": auth_headers(parent),
@@ -72,10 +109,8 @@ def home(make_user, make_household, auth_headers):
     }
 
 
-def call(client, method, path, household_id=None, headers=None):
-    return client.request(
-        method, path.format(household_id=household_id), headers=headers
-    )
+def call(client, method, path, ids, headers=None):
+    return client.request(method, path.format(**ids), headers=headers)
 
 
 def test_every_route_is_listed():
@@ -92,14 +127,12 @@ def test_every_route_is_listed():
     "method, path", routes(*(level for level in Access if level != Access.ANYONE))
 )
 def test_anonymous_gets_401(client, home, method, path):
-    assert call(client, method, path, home["household"].id).status_code == 401
+    assert call(client, method, path, home["ids"]).status_code == 401
 
 
 @pytest.mark.parametrize("method, path", routes(*HOUSEHOLD_LEVELS))
 def test_other_household_gets_404(client, home, method, path):
-    response = call(
-        client, method, path, home["household"].id, home["headers"]["outsider"]
-    )
+    response = call(client, method, path, home["ids"], home["headers"]["outsider"])
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Household not found"
@@ -107,7 +140,19 @@ def test_other_household_gets_404(client, home, method, path):
 
 @pytest.mark.parametrize("method, path", routes(*HOUSEHOLD_LEVELS))
 def test_unknown_household_gets_404(client, home, method, path):
-    response = call(client, method, path, uuid.uuid7(), home["headers"]["admin"])
+    ids = {**home["ids"], "household_id": uuid.uuid7()}
+
+    response = call(client, method, path, ids, home["headers"]["admin"])
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "method, path",
+    [route for route in routes(*HOUSEHOLD_LEVELS) if route.values[1].count("{") > 1],
+)
+def test_record_of_another_household_gets_404(client, home, method, path):
+    response = call(client, method, path, home["foreign_ids"], home["headers"]["admin"])
 
     assert response.status_code == 404
 
@@ -115,7 +160,7 @@ def test_unknown_household_gets_404(client, home, method, path):
 @pytest.mark.parametrize("method, path", routes(*HOUSEHOLD_LEVELS))
 @pytest.mark.parametrize("caller", ["kid", "parent", "admin"])
 def test_household_roles(client, home, method, path, caller):
-    response = call(client, method, path, home["household"].id, home["headers"][caller])
+    response = call(client, method, path, home["ids"], home["headers"][caller])
 
     if caller in ALLOWED[ROUTES[(method, path)]]:
         assert response.status_code not in DENIED
@@ -125,4 +170,6 @@ def test_household_roles(client, home, method, path, caller):
 
 @pytest.mark.parametrize("method, path", routes(Access.PARENT_ACCOUNT))
 def test_kid_account_gets_403(client, home, method, path):
-    assert call(client, method, path, headers=home["headers"]["kid"]).status_code == 403
+    response = call(client, method, path, home["ids"], home["headers"]["kid"])
+
+    assert response.status_code == 403

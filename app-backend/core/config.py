@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     dbname: str
 
     email_backend: Literal["console"] = "console"
+    # Web app address, used for links in emails.
+    app_url: str = "http://localhost:5173"
 
     @property
     def database_url(self) -> URL:

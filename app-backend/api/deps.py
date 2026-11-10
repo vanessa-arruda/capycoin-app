@@ -90,10 +90,10 @@ def require_admin(membership: ParentMembership) -> HouseholdMember:
 AdminMembership = Annotated[HouseholdMember, Depends(require_admin)]
 
 
-def household_router(**kwargs: Any) -> APIRouter:
-    """Router under /households/{household_id} that only members can reach."""
+def household_router(path: str = "", **kwargs: Any) -> APIRouter:
+    """Router under /households/{household_id}{path} that only members can reach."""
     return APIRouter(
-        prefix="/households/{household_id}",
+        prefix="/households/{household_id}" + path,
         dependencies=[Depends(get_membership)],
         **kwargs,
     )
