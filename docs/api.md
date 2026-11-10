@@ -170,13 +170,13 @@ flowchart TD
 How this is built, and what every new endpoint must follow:
 
 1. `get_current_user` reads the bearer token and loads the user, or returns 401.
-2. Household routers are mounted under `/households/{household_id}` with a router-level dependency that loads the caller's membership. It runs for every endpoint in the router, so an endpoint cannot skip it.
-3. Role checks (`require_parent`, `require_admin`) build on that membership.
+2. Household routers are created with `household_router()` from `api/deps.py`. It mounts them under `/households/{household_id}` with a router-level dependency (`get_membership`) that loads the caller's membership, or returns 404. It runs for every endpoint in the router, so an endpoint cannot skip it.
+3. Endpoints declare the role they need with a parameter type: `Membership` (any member), `ParentMembership` (a parent of the household, else 403) or `AdminMembership` (the admin, else 403). `ParentUser` is for routes outside a household that need a parent account, such as creating one. These checks run before the request body is validated, so a caller without access never learns what the body should look like.
 4. Records are always loaded with the household in the query, for example `WHERE tasks.id = :id AND tasks.household_id = :household_id`. Submissions and claims are joined to their task or prize to check the household. Never load a record by id alone and check afterwards.
 5. IDs in request bodies (such as `kid_ids`) are checked against the household's members too.
 6. Endpoints outside households (`/me`, `/notifications`) always filter by the caller's own user id.
 7. Responses use explicit Pydantic response models, never ORM objects, so hashes and internal fields cannot leak.
-8. Tests: a table lists every route with the roles allowed to call it. One parametrized test calls each route as an anonymous user, a parent of another household, a kid, a non-admin parent, and with record ids from another household, and checks the status codes above. Another test fails if any route is missing from that table.
+8. Tests: `tests/test_access.py` has a table (`ROUTES`) that lists every route with the access it needs. One parametrized test calls each route as an anonymous user, a parent of another household, a kid, a non-admin parent, and with record ids from another household, and checks the status codes above. Another test fails if any route is missing from that table.
 
 ### Database access from outside the backend
 
@@ -211,29 +211,30 @@ Emails (codes and invitations) go through the `EmailSender` interface in `app-ba
 | GET | `/me` | logged in | implemented |
 | PATCH | `/me` | logged in | implemented |
 | PUT | `/me/password` | logged in | implemented |
-| GET | `/me/households` | logged in | planned |
+| GET | `/me/households` | logged in | implemented |
 | GET | `/me/notification-preferences` | logged in | planned |
 | PUT | `/me/notification-preferences` | logged in | planned |
 
 - `PATCH /me` `{display_name?, username?}`. Omitted fields are unchanged; `"username": null` removes the username (`422` if the user has no email, since they could no longer log in). Usernames are 3 to 50 characters of `a-z 0-9 _ . -` and are stored in lowercase. `409` if the username is taken. Changing the email is not supported yet.
 - `PUT /me/password` `{current_password?, new_password}` → `204`. `current_password` is required when a password is already set; a missing or wrong one gives `422`. Revokes the user's other sessions.
-- `GET /me/households` → the households the user belongs to, with their role and whether they are admin.
+- `GET /me/households` → `[{id, name, timezone, is_admin}]`, the households the user belongs to, sorted by name.
 - `GET /me/notification-preferences` → every notification type and channel with its effective `enabled` value (defaults included). `PUT` takes `{preferences: [{type, channel, enabled}]}`.
 
 ### Households and members
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| POST | `/households` | parent account | planned |
-| GET | `/households/{hid}` | member | planned |
-| PATCH | `/households/{hid}` | parent | planned |
-| DELETE | `/households/{hid}` | admin | planned |
+| POST | `/households` | parent account | implemented |
+| GET | `/households/{hid}` | member | implemented |
+| PATCH | `/households/{hid}` | parent | implemented |
+| DELETE | `/households/{hid}` | admin | implemented |
 | GET | `/households/{hid}/members` | parent | planned |
 | DELETE | `/households/{hid}/members/{user_id}` | admin | planned |
 
 - `POST /households` `{name, timezone}` → `201`. The caller becomes the admin. `timezone` must be a valid IANA name such as `Europe/Stockholm`.
-- `PATCH /households/{hid}` `{name?, timezone?}`.
-- `DELETE /households/{hid}` `{confirm_name}` → `204`. `confirm_name` must equal the household name. Deletes everything in the household (see database.md).
+- `GET /households/{hid}` → `{id, name, timezone}`.
+- `PATCH /households/{hid}` `{name?, timezone?}`. Omitted fields are unchanged; `null` gives `422`.
+- `DELETE /households/{hid}` `{confirm_name}` → `204`. `confirm_name` must equal the household name exactly (`422` otherwise). Deletes everything in the household (see database.md).
 - `DELETE /households/{hid}/members/{user_id}` removes a **parent** from the household. The admin cannot remove themselves (`409`). Kids are removed through the kid endpoints.
 
 ### Invitations

@@ -28,7 +28,7 @@ from core.database import engine  # noqa: E402
 from core.email import get_email_sender  # noqa: E402
 from core.security import hash_secret  # noqa: E402
 from main import app  # noqa: E402
-from models import User  # noqa: E402
+from models import Household, HouseholdMember, User  # noqa: E402
 from models.enums import UserRole  # noqa: E402
 from services.auth import create_session  # noqa: E402
 
@@ -143,3 +143,16 @@ def auth_headers(db):
         return {"Authorization": f"Bearer {new_session.token}"}
 
     return headers
+
+
+@pytest.fixture
+def make_household(db):
+    def make(admin: User, *members: User, name="Home") -> Household:
+        household = Household(name=name, timezone="Europe/Stockholm")
+        household.members.append(HouseholdMember(user=admin, is_admin=True))
+        household.members.extend(HouseholdMember(user=member) for member in members)
+        db.add(household)
+        db.commit()
+        return household
+
+    return make

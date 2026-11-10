@@ -1,14 +1,19 @@
+import uuid
 from collections.abc import Iterator
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.database import SessionLocal
-from core.errors import Unauthorized
-from models import User, UserSession
+from core.errors import Forbidden, NotFound, Unauthorized
+from models import HouseholdMember, User, UserSession
+from models.enums import UserRole
 from services import auth
+
+HOUSEHOLD_NOT_FOUND = "Household not found"
 
 
 def get_db() -> Iterator[Session]:
@@ -38,3 +43,57 @@ def get_current_user(session: CurrentSession) -> User:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_parent_account(user: CurrentUser) -> User:
+    if user.role != UserRole.PARENT:
+        raise Forbidden("Only parents can do this")
+    return user
+
+
+ParentUser = Annotated[User, Depends(require_parent_account)]
+
+
+def get_membership(
+    household_id: uuid.UUID, user: CurrentUser, db: Db
+) -> HouseholdMember:
+    membership = db.scalar(
+        select(HouseholdMember).where(
+            HouseholdMember.household_id == household_id,
+            HouseholdMember.user_id == user.id,
+        )
+    )
+    # Same answer for a missing household and someone else's, so ids reveal nothing.
+    if membership is None:
+        raise NotFound(HOUSEHOLD_NOT_FOUND)
+    return membership
+
+
+Membership = Annotated[HouseholdMember, Depends(get_membership)]
+
+
+def require_parent(membership: Membership) -> HouseholdMember:
+    if membership.user.role != UserRole.PARENT:
+        raise Forbidden("Only parents of this household can do this")
+    return membership
+
+
+ParentMembership = Annotated[HouseholdMember, Depends(require_parent)]
+
+
+def require_admin(membership: ParentMembership) -> HouseholdMember:
+    if not membership.is_admin:
+        raise Forbidden("Only the household admin can do this")
+    return membership
+
+
+AdminMembership = Annotated[HouseholdMember, Depends(require_admin)]
+
+
+def household_router(**kwargs: Any) -> APIRouter:
+    """Router under /households/{household_id} that only members can reach."""
+    return APIRouter(
+        prefix="/households/{household_id}",
+        dependencies=[Depends(get_membership)],
+        **kwargs,
+    )

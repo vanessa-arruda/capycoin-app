@@ -1,8 +1,9 @@
 from fastapi import APIRouter, status
 
 from api.deps import CurrentSession, CurrentUser, Db
+from schemas.household import MyHouseholdResponse
 from schemas.user import PasswordChange, UserResponse, UserUpdate
-from services import auth, users
+from services import auth, households, users
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -22,3 +23,8 @@ def change_password(payload: PasswordChange, session: CurrentSession, db: Db) ->
     auth.change_password(
         db, session.user, payload.current_password, payload.new_password, session
     )
+
+
+@router.get("/households")
+def list_my_households(user: CurrentUser, db: Db) -> list[MyHouseholdResponse]:
+    return households.list_user_households(db, user)
