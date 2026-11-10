@@ -5,12 +5,10 @@ requires-python = ">=3.15"
 dependencies = [
     "alembic>=1.20.1",
     "asyncpg>=0.32.0",
-    "bcrypt>=5.0.0",
     "fastapi>=0.162.0",
-    "passlib>=1.7.4",
     "psycopg2-binary>=2.9.13",
+    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.16.2",
-    "python-jose>=3.5.0",
     "sqlalchemy>=2.1.8",
     "uvicorn>=0.54.0",
 ]
@@ -19,4 +17,10 @@ dependencies = [
 dev = [
     "black>=26.10.1",
     "flake8>=7.5.0",
+    "httpx2>=2.16.0",
+    "pytest>=9.2.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

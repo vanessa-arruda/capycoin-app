@@ -1,5 +1,9 @@
 BACKEND := uv run --directory app-backend
 
+DB_CONTAINER := capycoin-postgres
+DB_IMAGE := docker.io/library/postgres:17
+DB_PORT ?= 5432
+
 be-install:
 	uv sync --directory app-backend
 
@@ -14,3 +18,16 @@ be-lint:
 
 be-migrate:
 	$(BACKEND) alembic upgrade head
+
+be-test:
+	$(BACKEND) pytest
+
+be-db-up:
+	podman container exists $(DB_CONTAINER) || podman create --name $(DB_CONTAINER) \
+		-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=capycoin \
+		-p 127.0.0.1:$(DB_PORT):5432 -v capycoin-pgdata:/var/lib/postgresql/data $(DB_IMAGE)
+	podman start $(DB_CONTAINER)
+	until podman exec $(DB_CONTAINER) pg_isready -U postgres -q; do sleep 1; done
+
+be-db-down:
+	podman stop $(DB_CONTAINER)

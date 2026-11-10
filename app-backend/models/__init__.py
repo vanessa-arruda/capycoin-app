@@ -1,9 +1,10 @@
+from .auth import OtpCode, UserSession
 from .base import Base
 from .household import Household, HouseholdInvitation, HouseholdMember
 from .notification import Notification, NotificationPreference
 from .store import Prize, PrizeClaim
 from .task import Task, TaskAssignment, TaskSubmission
-from .user import OtpCode, User
+from .user import User
 from .wallet import CreditTransaction
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "TaskAssignment",
     "TaskSubmission",
     "User",
+    "UserSession",
 ]

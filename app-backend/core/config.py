@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     host: str
     port: int
     dbname: str
+
+    email_backend: Literal["console"] = "console"
 
     @property
     def database_url(self) -> URL:

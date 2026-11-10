@@ -23,7 +23,7 @@ erDiagram
     households ||--o{ household_members : has
     users ||--o{ household_members : "is member"
     households ||--o{ household_invitations : has
-    users ||--o{ otp_codes : has
+    users ||--o{ sessions : has
     users ||--o{ notification_preferences : has
     households ||--o{ tasks : has
     tasks ||--o{ task_assignments : "assigned to"
@@ -68,11 +68,19 @@ erDiagram
     }
     otp_codes {
         uuid id PK
-        uuid user_id FK
+        string email "no FK: also used for sign-up"
         string code_hash
         timestamptz expires_at
         timestamptz consumed_at
         int attempts
+    }
+    sessions {
+        uuid id PK
+        uuid user_id FK
+        string token_hash UK
+        timestamptz expires_at
+        timestamptz last_used_at
+        timestamptz revoked_at
     }
     tasks {
         uuid id PK
@@ -157,7 +165,7 @@ households
 
 users
 ├── household_members
-├── otp_codes
+├── sessions
 ├── notification_preferences
 ├── notifications (as recipient)
 └── as a kid: task_assignments, task_submissions, prize_claims, credit_transactions
@@ -243,7 +251,13 @@ There is one row per recipient. A notification links to what it is about through
 
 ### Authentication is our own
 
-Supabase Auth cannot log in with a username alone, and kids may have no email. The backend handles login itself: `users.password_hash` for passwords and `otp_codes` for one-time codes sent by email. Only hashes of codes and invitation tokens are stored.
+Supabase Auth cannot log in with a username alone, and kids may have no email. The backend handles login itself: `users.password_hash` for passwords, `otp_codes` for one-time codes sent by email, and `sessions` for logged-in clients. Only hashes of passwords, codes, session tokens and invitation tokens are stored.
+
+`otp_codes` is keyed by email, not by user, because a parent signs up by verifying a code before their account exists. It is not deleted with a user; codes expire within minutes. See [api.md](api.md) for how login and sessions work.
+
+### Row Level Security on every table
+
+Supabase publishes the `public` schema through its REST API. A migration enables RLS on every table with no policies and revokes access from Supabase's `anon` and `authenticated` roles. The backend connects as the table owner, which RLS does not apply to. **New tables must enable RLS in their migration** (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`); a test fails otherwise.
 
 ## Conventions
 
@@ -272,8 +286,12 @@ Some rules are hard to express as database constraints, so the backend code must
 Run these from the repo root:
 
 ```bash
+make be-db-up                                # start the local Postgres container (podman)
 make be-migrate                              # apply all migrations (alembic upgrade head)
+make be-test                                 # tests rebuild the schema in the capycoin_test database
 ```
+
+For the local container, copy `.env.example` to `.env`. Tests always use the container's `capycoin_test` database, whatever `.env` says.
 
 Create a new migration after changing a model, from `app-backend/`:
 
@@ -296,5 +314,4 @@ DROP TYPE IF EXISTS activitystatus;
 ## Not covered yet
 
 - Adding an existing kid without an email to a second household. Invitations work by email only.
-- Refresh tokens or sessions. This depends on how login is built.
 - Push notifications for the installable web app. `notification_preferences.channel` can get a new value when that is added.

@@ -1,11 +1,9 @@
-import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, String
+from sqlalchemy import CheckConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, CreatedAt, Timestamps, UUIDPrimaryKey, enum_column
+from .base import Base, Timestamps, UUIDPrimaryKey, enum_column
 from .enums import UserRole
 
 if TYPE_CHECKING:
@@ -35,15 +33,3 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     memberships: Mapped[list[HouseholdMember]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
-
-
-class OtpCode(UUIDPrimaryKey, CreatedAt, Base):
-    __tablename__ = "otp_codes"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
-    )
-    code_hash: Mapped[str] = mapped_column(String(255))
-    expires_at: Mapped[datetime]
-    consumed_at: Mapped[datetime | None]
-    attempts: Mapped[int] = mapped_column(default=0, server_default="0")
