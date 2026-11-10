@@ -241,6 +241,25 @@ To stop two requests from spending the same credits at the same time, any code t
 - `households.timezone` (an IANA name such as `Europe/Stockholm`) decides when a day, week or month starts.
 - A submission's photo lives in object storage. The database stores only its path.
 
+### Times and dates
+
+The model stores two kinds of time values, and handles them differently on purpose.
+
+**Moments in time are stored in UTC.** `created_at`, `expires_at`, `due_at`, `reviewed_at` and every other `*_at` column is a `timestamptz`: one exact moment, the same everywhere in the world. Postgres converts it to UTC when writing and stores no timezone. The backend reads and writes these columns through the `UTCDateTime` type in `models/base.py`, which:
+
+- refuses a datetime without a timezone, because Postgres would read it in the connection's timezone and silently store the wrong moment. Use `core.clock.now()`, which returns UTC.
+- converts every value it reads to UTC. Postgres returns `timestamptz` values with the offset of the connection's `TimeZone` setting (for example `-03:00`). That setting belongs to the server or the connection, and Supabase's connection pooler shares server connections between clients, so a value set on one connection may not hold. Converting in the column type gives UTC whatever the server is set to.
+
+Converting to the user's timezone is left to the client that displays the value.
+
+**Calendar days are stored as dates in the household's timezone.** `tasks.starts_on` and `task_submissions.period_start` are `DATE` columns with no time and no timezone. They mean a day as the family sees it ("the task starts on 10 November", "this submission is for Monday"), and are read together with `households.timezone`. Storing them as UTC moments would break in three ways:
+
+- **Day boundaries move.** Monday 00:00 in Stockholm is Sunday 23:00 UTC in winter and 22:00 UTC in summer. A daily task stored as a UTC moment would reset an hour off for half the year.
+- **The day itself can change.** For a family in São Paulo (UTC-3), a submission at 22:00 on Monday is 01:00 on Tuesday in UTC. Its period would be Tuesday, and the kid could submit Monday's task twice.
+- **Changing the household timezone would move old days.** Stored moments converted with the new timezone could fall on other days. A stored date stays the same day.
+
+The rule: **a moment that happened or will happen is a UTC `timestamptz`; a day on the family's calendar is a `DATE` in the household's timezone.** To find the current period of a recurring task, take `core.clock.now()`, convert it to the household's timezone, and take the start of that day, week or month. Calendar apps store recurring events the same way, as local times with a timezone, for the same reasons.
+
 ### Tasks and prizes are archived, not deleted
 
 Deleting a task or prize would break the history that points to it. They have an `archived_at` column instead. The database enforces this for paid items: hard-deleting a task whose submission was rewarded fails, because the credit log still references it. Deleting a whole household still works, because everything in it is deleted together.
@@ -264,7 +283,8 @@ Supabase publishes the `public` schema through its REST API. A migration enables
 | Topic | Convention | Why |
 |---|---|---|
 | Primary keys | UUIDv7, generated in Python (`uuid.uuid7()`) | Ordered by time, so indexes stay efficient. IDs in URLs can't be guessed. |
-| Timestamps | `timestamptz`, `created_at`/`updated_at` set by the database | No timezone mix-ups between servers and households. |
+| Timestamps | `timestamptz` through `UTCDateTime`, always UTC; `created_at`/`updated_at` set by the database | One meaning for every moment, whatever the server's timezone. See [Times and dates](#times-and-dates). |
+| Calendar days | `DATE`, in the household's timezone | A day on the family's calendar is not a moment. See [Times and dates](#times-and-dates). |
 | Enums | `VARCHAR` + `CHECK`, storing lowercase values (`'pending'`) | Easier to change than native Postgres enums, and readable in SQL. |
 | Credits | `integer` | Credits are whole numbers. |
 | Constraint names | Fixed naming convention in `models/base.py` (`pk_`, `fk_`, `uq_`, `ck_`, `ix_`) | Migrations can refer to constraints by a stable name. |

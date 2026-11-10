@@ -10,7 +10,7 @@ This document describes the Capycoin backend API: how users sign up and log in, 
 - **Format:** JSON request and response bodies.
 - **Authentication:** every endpoint except the public auth endpoints needs an `Authorization: Bearer <session token>` header.
 - **IDs:** UUIDs (version 7, ordered by creation time).
-- **Times:** ISO 8601 with a timezone, for example `2026-11-10T09:30:00Z`.
+- **Times:** moments are ISO 8601 in UTC, for example `2026-11-10T09:30:00Z`; requests may send any offset. Calendar days (such as a task's `starts_on`) are `YYYY-MM-DD` in the household's timezone. See [Times and dates](database.md#times-and-dates).
 - **Pagination:** list endpoints that can grow return `{"items": [...], "next_before": "<id or null>"}`. Pass `?before=<next_before>&limit=<n>` to get the next page. `limit` defaults to 50, maximum 100.
 - **Errors:** `{"detail": "<message>"}`, with these status codes:
 

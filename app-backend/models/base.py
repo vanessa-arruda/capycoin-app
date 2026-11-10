@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, MetaData, func
+from sqlalchemy import DateTime, Enum, MetaData, TypeDecorator, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Stable constraint names so Alembic migrations can reference them.
@@ -15,9 +15,28 @@ NAMING_CONVENTION = {
 }
 
 
+class UTCDateTime(TypeDecorator):
+    """timestamptz that rejects naive datetimes and always reads back in UTC.
+
+    Doesn't depend on the database session's TimeZone setting, which a
+    connection pooler may not keep. See docs/database.md, "Times and dates".
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("datetime without a timezone; use core.clock.now()")
+        return value
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else value.astimezone(UTC)
+
+
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-    type_annotation_map = {datetime: DateTime(timezone=True)}
+    type_annotation_map = {datetime: UTCDateTime()}
 
 
 class UUIDPrimaryKey:

@@ -4,6 +4,7 @@ from alembic import context
 
 from core.database import engine
 from models import Base
+from models.base import UTCDateTime
 
 config = context.config
 
@@ -13,12 +14,20 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def render_item(type_, obj, autogen_context):
+    # Migrations only need the database type, not the Python wrapper.
+    if type_ == "type" and isinstance(obj, UTCDateTime):
+        return "sa.DateTime(timezone=True)"
+    return False
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=engine.url.render_as_string(hide_password=False),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_item=render_item,
     )
 
     with context.begin_transaction():
@@ -27,7 +36,11 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            render_item=render_item,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
