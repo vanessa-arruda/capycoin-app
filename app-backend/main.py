@@ -10,6 +10,7 @@ from api.routers import (
     members,
     prizes,
     tasks,
+    wallet,
 )
 from core.errors import AppError, handle_app_error
 
@@ -37,3 +38,4 @@ app.include_router(invitations.accept_router)
 app.include_router(kids.router)
 app.include_router(tasks.router)
 app.include_router(prizes.router)
+app.include_router(wallet.router)

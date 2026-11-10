@@ -288,8 +288,8 @@ sequenceDiagram
 | GET | `/households/{hid}/kids/{kid_id}` | parent | implemented |
 | PATCH | `/households/{hid}/kids/{kid_id}` | admin | implemented |
 | DELETE | `/households/{hid}/kids/{kid_id}` | admin | implemented |
-| GET | `/households/{hid}/kids/{kid_id}/transactions` | parent | planned |
-| POST | `/households/{hid}/kids/{kid_id}/adjustments` | parent | planned |
+| GET | `/households/{hid}/kids/{kid_id}/transactions` | parent | implemented |
+| POST | `/households/{hid}/kids/{kid_id}/adjustments` | parent | implemented |
 
 A kid logs in with a one-time code if they have an email, or with a username and password if they don't (or either, if they have both). An email is added only after the code sent to it is entered, so every email on an account is verified:
 
@@ -319,8 +319,8 @@ Without this check a parent could set an address they don't own, and its owner w
 - `GET /kids` lists the household's kids by name. `GET`, `PATCH` and `DELETE` on `/kids/{kid_id}` return `404` if the id is not a kid of this household.
 - `PATCH /kids/{kid_id}` `{display_name?, username?, password?, email?, code?}`. Omitted fields are unchanged. A new `email` needs a `code` from `POST /kids/email-code`. `"email": null` or `"username": null` removes it, as long as the kid can still log in (`422` otherwise). `null` for `display_name` or `password` gives `422`. Setting `password` revokes the kid's sessions.
 - `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). The account itself is deleted only if the kid belongs to no other household.
-- `GET /transactions` → paginated credit log, newest first, with the linked task or prize name.
-- `POST /adjustments` `{amount, note}` → `201`. `amount` is a non-zero integer, positive to add and negative to remove credits. A balance may go negative. The kid gets a notification.
+- `GET /transactions` → paginated credit log for this household, newest first. Each entry is `{id, amount, kind, note, task_submission_id, task_title, prize_claim_id, prize_name, created_by, created_at}`; `kind` is `task_reward`, `prize_claim` or `manual_adjustment`.
+- `POST /adjustments` `{amount, note}` → `201` with the new entry. `amount` is a non-zero integer from -1,000,000 to 1,000,000, positive to add and negative to remove credits. `note` (1 to 500 characters) tells the kid why. A balance may go negative. The kid gets a `credits_adjusted` notification.
 
 ### Tasks
 
@@ -411,7 +411,7 @@ The lock on the kid's membership row makes concurrent approvals and claims for t
 - `GET /notifications/{id}` includes a summary of what it is about (the submission, claim or credit change). `404` for anyone but the recipient.
 - `POST /notifications/read-all` takes an optional `{household_id}`.
 
-Parents get `task_submitted` and `prize_claimed`. Kids get `task_approved`, `task_denied`, `prize_claim_approved`, `prize_claim_denied` and `credits_adjusted`. A notification is created only when the recipient has not turned off its `in_app` channel.
+Parents get `task_submitted` and `prize_claimed`. Kids get `task_approved`, `task_denied`, `prize_claim_approved`, `prize_claim_denied` and `credits_adjusted`. A notification is created only when the recipient has not turned off its `in_app` channel. Without a saved preference, `in_app` is on and `email` is off (no notification emails are sent yet).
 
 ### Health
 

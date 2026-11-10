@@ -167,3 +167,19 @@ def make_household(db):
         return household
 
     return make
+
+
+@pytest.fixture
+def make_kid(db, make_user):
+    def make(household, username="lia", display_name="Lia"):
+        kid = make_user(
+            role=UserRole.KID,
+            username=username,
+            display_name=display_name,
+            password="kid-password",
+        )
+        db.add(HouseholdMember(household_id=household.id, user_id=kid.id))
+        db.commit()
+        return kid
+
+    return make

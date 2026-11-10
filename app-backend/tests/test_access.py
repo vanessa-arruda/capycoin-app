@@ -59,6 +59,17 @@ ROUTES = {
     ("GET", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
     ("PATCH", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
     ("DELETE", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
+    ("GET", "/households/{household_id}/kids/{kid_id}/transactions"): Access.PARENT,
+    ("POST", "/households/{household_id}/kids/{kid_id}/adjustments"): Access.PARENT,
+}
+
+# Valid bodies for routes with record ids where {} is not enough, so requests
+# get past validation to the record lookup.
+BODIES = {
+    ("POST", "/households/{household_id}/kids/{kid_id}/adjustments"): {
+        "amount": 1,
+        "note": "test",
+    },
 }
 
 HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
@@ -191,9 +202,13 @@ def test_unknown_household_gets_404(client, home, method, path):
     [route for route in routes(*HOUSEHOLD_LEVELS) if route.values[1].count("{") > 1],
 )
 def test_record_of_another_household_gets_404(client, home, method, path):
-    # A valid body, so the request gets past validation to the record lookup.
     response = call(
-        client, method, path, home["foreign_ids"], home["headers"]["admin"], json={}
+        client,
+        method,
+        path,
+        home["foreign_ids"],
+        home["headers"]["admin"],
+        json=BODIES.get((method, path), {}),
     )
 
     assert response.status_code == 404

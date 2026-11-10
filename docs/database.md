@@ -231,7 +231,7 @@ WHERE p.household_id = :household_id AND pc.kid_id = :kid_id AND pc.status = 'pe
 -- available = balance - reserved
 ```
 
-To stop two requests from spending the same credits at the same time, any code that creates a claim or approves one must first lock the kid's membership row: `SELECT ... FROM household_members WHERE household_id = :h AND user_id = :kid FOR UPDATE`.
+To stop two requests from spending the same credits at the same time, any code that changes a kid's credits or reserved credits (claims, approvals, adjustments) must first lock the kid's membership row: `SELECT ... FROM household_members WHERE household_id = :h AND user_id = :kid FOR UPDATE`. `services.wallet.lock_kid` does this.
 
 ### Tasks, assignments and recurring tasks
 
