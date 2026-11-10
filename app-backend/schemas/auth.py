@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 
-from .common import DisplayName, Email, Login
+from .common import Code, DisplayName, Email, Login
 from .user import UserResponse
 
 
@@ -13,7 +13,7 @@ class OtpRequest(BaseModel):
 
 class OtpVerify(BaseModel):
     email: Email
-    code: Annotated[str, StringConstraints(pattern=r"^\d{6}$")]
+    code: Code
     display_name: DisplayName | None = None
 
 

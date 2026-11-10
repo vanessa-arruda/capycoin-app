@@ -6,6 +6,11 @@ class UserRole(StrEnum):
     KID = "kid"
 
 
+class OtpPurpose(StrEnum):
+    LOGIN = "login"
+    EMAIL_VALIDATION = "email_validation"
+
+
 class InvitationStatus(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"

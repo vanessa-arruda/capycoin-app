@@ -27,6 +27,8 @@ def commit_user_changes(db: Session) -> None:
         db.rollback()
         if "uq_users_username" in str(error.orig):
             raise Conflict("Username is already taken")
+        if "uq_users_email" in str(error.orig):
+            raise Conflict("Email is already in use")
         if "ck_users_can_log_in" in str(error.orig):
-            raise InvalidInput("A user without email needs a username")
+            raise InvalidInput("A user without email needs a username and a password")
         raise

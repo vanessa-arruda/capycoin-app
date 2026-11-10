@@ -1,9 +1,11 @@
 import uuid
+from typing import Annotated
 
-from fastapi import status
+from fastapi import Depends, status
 
 from api.deps import AdminMembership, Db, ParentMembership, household_router
-from schemas.kid import KidCreate, KidResponse, KidUpdate
+from core.email import EmailSender, get_email_sender
+from schemas.kid import KidCreate, KidEmailCode, KidResponse, KidUpdate
 from services import kids
 
 router = household_router("/kids", tags=["kids"])
@@ -18,6 +20,16 @@ def list_kids(membership: ParentMembership, db: Db) -> list[KidResponse]:
 def create_kid(data: KidCreate, membership: AdminMembership, db: Db) -> KidResponse:
     kid = kids.create_kid(db, membership.household_id, data)
     return kids.kid_response(db, membership.household_id, kid)
+
+
+@router.post("/email-code", status_code=status.HTTP_202_ACCEPTED)
+def send_email_code(
+    payload: KidEmailCode,
+    membership: AdminMembership,
+    db: Db,
+    sender: Annotated[EmailSender, Depends(get_email_sender)],
+) -> None:
+    kids.send_email_code(db, membership, payload.email, sender)
 
 
 @router.get("/{kid_id}")

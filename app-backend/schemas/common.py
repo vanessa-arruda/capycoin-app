@@ -24,3 +24,4 @@ Username = Annotated[
 ]
 Login = Annotated[str, BeforeValidator(_normalize), StringConstraints(min_length=1)]
 Password = Annotated[str, Field(min_length=8, max_length=128)]
+Code = Annotated[str, StringConstraints(pattern=r"^\d{6}$")]

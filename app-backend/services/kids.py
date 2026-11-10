@@ -3,7 +3,9 @@ import uuid
 from sqlalchemy import delete, exists, select
 from sqlalchemy.orm import Session
 
-from core.errors import InvalidInput, NotFound
+from core import clock
+from core.email import EmailMessage, EmailSender
+from core.errors import InvalidInput, NotFound, Unauthorized
 from core.security import hash_secret
 from models import (
     CreditTransaction,
@@ -16,7 +18,7 @@ from models import (
     TaskSubmission,
     User,
 )
-from models.enums import UserRole
+from models.enums import OtpPurpose, UserRole
 from schemas.kid import KidCreate, KidResponse, KidUpdate
 from services import auth, wallet
 from services.users import commit_user_changes
@@ -59,18 +61,52 @@ def _response(kid: User, balance: wallet.Balance) -> KidResponse:
         id=kid.id,
         display_name=kid.display_name,
         username=kid.username,
+        email=kid.email,
         balance=balance.balance,
         reserved=balance.reserved,
         available=balance.available,
     )
 
 
+def send_email_code(
+    db: Session, parent: HouseholdMember, email: str, sender: EmailSender
+) -> None:
+    code = auth.issue_code(db, email, OtpPurpose.EMAIL_VALIDATION)
+    sender.send(
+        EmailMessage(
+            to=email,
+            subject="Confirm your email for Capycoin",
+            body=(
+                f"{parent.user.display_name} wants to add this email address to "
+                f'a kid\'s account in the household "{parent.household.name}" '
+                "on Capycoin.\n\n"
+                f"To confirm, give them this code: {code}. "
+                "It expires in 10 minutes.\n\n"
+                "If you don't know what this is, ignore this email. "
+                "The address will not be added."
+            ),
+        )
+    )
+
+
+def _use_email_code(db: Session, email: str, code: str) -> None:
+    try:
+        otp = auth.check_code(db, email, code, OtpPurpose.EMAIL_VALIDATION)
+    except Unauthorized:
+        # A 401 would tell the client that the parent's session ended.
+        raise InvalidInput(auth.INVALID_CODE)
+    otp.consumed_at = clock.now()
+
+
 def create_kid(db: Session, household_id: uuid.UUID, data: KidCreate) -> User:
+    if data.email is not None:
+        _use_email_code(db, data.email, data.code)
     kid = User(
         role=UserRole.KID,
         display_name=data.display_name,
+        email=data.email,
         username=data.username,
-        password_hash=hash_secret(data.password),
+        password_hash=hash_secret(data.password) if data.password else None,
     )
     kid.memberships.append(HouseholdMember(household_id=household_id))
     db.add(kid)
@@ -82,13 +118,19 @@ def update_kid(
     db: Session, household_id: uuid.UUID, kid_id: uuid.UUID, changes: KidUpdate
 ) -> User:
     kid = get_kid(db, household_id, kid_id)
-    for field in changes.model_fields_set:
-        if getattr(changes, field) is None:
+    fields = changes.model_fields_set
+    for field in ("display_name", "password"):
+        if field in fields and getattr(changes, field) is None:
             raise InvalidInput(f"{field} cannot be empty")
+
     if changes.display_name is not None:
         kid.display_name = changes.display_name
-    if changes.username is not None:
+    if "username" in fields:
         kid.username = changes.username
+    if "email" in fields and changes.email != kid.email:
+        if changes.email is not None:
+            _use_email_code(db, changes.email, changes.code)
+        kid.email = changes.email
     if changes.password is not None:
         kid.password_hash = hash_secret(changes.password)
         auth.revoke_sessions(db, kid)

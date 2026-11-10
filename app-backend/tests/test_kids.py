@@ -134,6 +134,7 @@ class TestCreateKid:
             "id": None,
             "display_name": "Lia",
             "username": "lia",
+            "email": None,
             "balance": 0,
             "reserved": 0,
             "available": 0,
@@ -159,6 +160,118 @@ class TestCreateKid:
             f"/households/{household.id}/kids",
             headers=headers,
             json={"display_name": "Lia", "username": "lia"},
+        )
+
+        assert response.status_code == 422
+
+
+class TestKidEmail:
+    def send_code(self, client, household, headers, email="lia@example.com"):
+        return client.post(
+            f"/households/{household.id}/kids/email-code",
+            headers=headers,
+            json={"email": email},
+        )
+
+    def create(self, client, household, headers, **fields):
+        return client.post(
+            f"/households/{household.id}/kids",
+            headers=headers,
+            json={"display_name": "Lia", **fields},
+        )
+
+    def test_kid_with_a_validated_email_logs_in_with_a_code(
+        self, client, outbox, household, headers
+    ):
+        assert self.send_code(client, household, headers).status_code == 202
+        assert outbox.messages[-1].to == "lia@example.com"
+
+        response = self.create(
+            client, household, headers, email="Lia@Example.com", code=outbox.last_code()
+        )
+
+        assert response.status_code == 201
+        assert response.json()["email"] == "lia@example.com"
+        assert response.json()["username"] is None
+        client.post("/auth/otp/request", json={"email": "lia@example.com"})
+        login = client.post(
+            "/auth/otp/verify",
+            json={"email": "lia@example.com", "code": outbox.last_code()},
+        )
+        assert login.json()["user"]["role"] == "kid"
+
+    def test_wrong_code_is_422_not_401(self, client, outbox, household, headers):
+        self.send_code(client, household, headers)
+        wrong = f"{(int(outbox.last_code()) + 1) % 1_000_000:06d}"
+
+        response = self.create(
+            client, household, headers, email="lia@example.com", code=wrong
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Invalid or expired code"
+
+    def test_email_needs_a_code(self, client, household, headers):
+        response = self.create(client, household, headers, email="lia@example.com")
+
+        assert response.status_code == 422
+
+    def test_needs_an_email_or_a_username_and_password(
+        self, client, household, headers
+    ):
+        response = self.create(client, household, headers, username="lia")
+
+        assert response.status_code == 422
+
+    def test_email_in_use_is_reported_only_with_a_valid_code(
+        self, client, outbox, household, headers, make_user
+    ):
+        make_user(email="taken@example.com")
+
+        guessed = self.create(
+            client, household, headers, email="taken@example.com", code="123456"
+        )
+        self.send_code(client, household, headers, "taken@example.com")
+        proven = self.create(
+            client,
+            household,
+            headers,
+            email="taken@example.com",
+            code=outbox.last_code(),
+        )
+
+        assert guessed.status_code == 422
+        assert proven.status_code == 409
+
+    def test_add_and_remove_an_email_later(
+        self, client, outbox, household, headers, make_kid
+    ):
+        lia = make_kid(household)
+        url = f"/households/{household.id}/kids/{lia.id}"
+        self.send_code(client, household, headers)
+
+        added = client.patch(
+            url,
+            headers=headers,
+            json={"email": "lia@example.com", "code": outbox.last_code()},
+        )
+        removed = client.patch(url, headers=headers, json={"email": None})
+
+        assert added.json()["email"] == "lia@example.com"
+        assert removed.json()["email"] is None
+
+    def test_cannot_remove_the_only_way_to_log_in(
+        self, client, outbox, household, headers
+    ):
+        self.send_code(client, household, headers)
+        lia = self.create(
+            client, household, headers, email="lia@example.com", code=outbox.last_code()
+        ).json()
+
+        response = client.patch(
+            f"/households/{household.id}/kids/{lia['id']}",
+            headers=headers,
+            json={"email": None},
         )
 
         assert response.status_code == 422

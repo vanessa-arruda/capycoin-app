@@ -17,7 +17,7 @@ from core.security import (
     verify_secret,
 )
 from models import OtpCode, User, UserSession
-from models.enums import UserRole
+from models.enums import OtpPurpose, UserRole
 
 OTP_TTL = timedelta(minutes=10)
 OTP_MAX_ATTEMPTS = 5
@@ -40,7 +40,12 @@ class NewSession:
     user: User
 
 
-def request_otp(db: Session, email: str, sender: EmailSender) -> None:
+def issue_code(db: Session, email: str, purpose: OtpPurpose) -> str:
+    """Store a new code for this email and purpose, and return it to be sent.
+
+    Earlier codes for the same purpose stop working. The request limit counts
+    codes of every purpose, since each one is an email to that address.
+    """
     now = clock.now()
     recent = db.scalar(
         select(func.count())
@@ -52,20 +57,58 @@ def request_otp(db: Session, email: str, sender: EmailSender) -> None:
 
     db.execute(
         update(OtpCode)
-        .where(OtpCode.email == email, OtpCode.consumed_at.is_(None))
+        .where(
+            OtpCode.email == email,
+            OtpCode.purpose == purpose,
+            OtpCode.consumed_at.is_(None),
+        )
         .values(consumed_at=now)
     )
     code = new_otp_code()
     db.add(
         OtpCode(
             email=email,
+            purpose=purpose,
             code_hash=hash_secret(code),
             expires_at=now + OTP_TTL,
             created_at=now,
         )
     )
     db.commit()
+    return code
 
+
+def check_code(db: Session, email: str, code: str, purpose: OtpPurpose) -> OtpCode:
+    """Return the matching code, locked. The caller sets consumed_at and commits.
+
+    Raises Unauthorized for a wrong, expired or used code; wrong guesses count
+    towards the attempt limit.
+    """
+    otp = db.scalar(
+        select(OtpCode)
+        .where(
+            OtpCode.email == email,
+            OtpCode.purpose == purpose,
+            OtpCode.consumed_at.is_(None),
+            OtpCode.expires_at > clock.now(),
+            OtpCode.attempts < OTP_MAX_ATTEMPTS,
+        )
+        .order_by(OtpCode.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if otp is None:
+        spend_verify_time()
+        raise Unauthorized(INVALID_CODE)
+    if not verify_secret(code, otp.code_hash):
+        otp.attempts += 1
+        db.commit()
+        raise Unauthorized(INVALID_CODE)
+    return otp
+
+
+def request_otp(db: Session, email: str, sender: EmailSender) -> None:
+    code = issue_code(db, email, OtpPurpose.LOGIN)
     sender.send(
         EmailMessage(
             to=email,
@@ -82,26 +125,7 @@ def verify_otp(
 
     Returns the session and whether an account was created.
     """
-    now = clock.now()
-    otp = db.scalar(
-        select(OtpCode)
-        .where(
-            OtpCode.email == email,
-            OtpCode.consumed_at.is_(None),
-            OtpCode.expires_at > now,
-            OtpCode.attempts < OTP_MAX_ATTEMPTS,
-        )
-        .order_by(OtpCode.created_at.desc())
-        .limit(1)
-        .with_for_update()
-    )
-    if otp is None:
-        spend_verify_time()
-        raise Unauthorized(INVALID_CODE)
-    if not verify_secret(code, otp.code_hash):
-        otp.attempts += 1
-        db.commit()
-        raise Unauthorized(INVALID_CODE)
+    otp = check_code(db, email, code, OtpPurpose.LOGIN)
 
     user = db.scalar(select(User).where(User.email == email))
     created = user is None
@@ -113,7 +137,7 @@ def verify_otp(
         user = User(role=UserRole.PARENT, email=email, display_name=display_name)
         db.add(user)
 
-    otp.consumed_at = now
+    otp.consumed_at = clock.now()
     try:
         new_session = create_session(db, user)
         db.commit()

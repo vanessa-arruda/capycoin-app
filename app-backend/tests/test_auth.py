@@ -143,6 +143,42 @@ class TestVerifyCode:
         assert verify(client, code, display_name="Mom").status_code == 201
         assert verify(client, code).status_code == 401
 
+    def test_email_validation_code_does_not_log_in(
+        self, client, outbox, make_user, make_household, auth_headers
+    ):
+        admin = make_user(email="mom@example.com")
+        household = make_household(admin)
+        client.post(
+            f"/households/{household.id}/kids/email-code",
+            headers=auth_headers(admin),
+            json={"email": "lia@example.com"},
+        )
+
+        response = verify(
+            client, outbox.last_code(), email="lia@example.com", display_name="Lia"
+        )
+
+        assert response.status_code == 401
+
+    def test_login_code_does_not_validate_an_email(
+        self, client, outbox, make_user, make_household, auth_headers
+    ):
+        admin = make_user(email="mom@example.com")
+        household = make_household(admin)
+        request_code(client, "lia@example.com")
+
+        response = client.post(
+            f"/households/{household.id}/kids",
+            headers=auth_headers(admin),
+            json={
+                "display_name": "Lia",
+                "email": "lia@example.com",
+                "code": outbox.last_code(),
+            },
+        )
+
+        assert response.status_code == 422
+
     def test_code_is_not_stored_in_plain_text(self, client, outbox, db):
         from models import OtpCode
 

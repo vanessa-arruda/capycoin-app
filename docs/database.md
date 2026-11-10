@@ -69,6 +69,7 @@ erDiagram
     otp_codes {
         uuid id PK
         string email "no FK: also used for sign-up"
+        string purpose "login or email_validation"
         string code_hash
         timestamptz expires_at
         timestamptz consumed_at
@@ -272,7 +273,7 @@ There is one row per recipient. A notification links to what it is about through
 
 Supabase Auth cannot log in with a username alone, and kids may have no email. The backend handles login itself: `users.password_hash` for passwords, `otp_codes` for one-time codes sent by email, and `sessions` for logged-in clients. Only hashes of passwords, codes, session tokens and invitation tokens are stored.
 
-`otp_codes` is keyed by email, not by user, because a parent signs up by verifying a code before their account exists. It is not deleted with a user; codes expire within minutes. See [api.md](api.md) for how login and sessions work.
+`otp_codes` is keyed by email, not by user, because a parent signs up by verifying a code before their account exists. Each code has a `purpose` (`login`, or `email_validation` for adding an email to a kid's account) and works only for it. Every email in `users` has been verified with a code: parents sign up with one, and a kid's email is saved only after the code sent to it is entered. It is not deleted with a user; codes expire within minutes. See [api.md](api.md) for how login and sessions work.
 
 ### Row Level Security on every table
 
@@ -299,7 +300,8 @@ Some rules are hard to express as database constraints, so the backend code must
 - `reviewed_by` and `created_by` are parents of that household.
 - A `credit_transactions.household_id` matches the household of its submission or claim.
 - Claims and claim approvals check the available balance while holding the lock described above.
-- Invitations are rejected after `expires_at`, and one-time codes after `expires_at` or too many `attempts`.
+- Invitations are rejected after `expires_at`, and one-time codes after `expires_at` or too many `attempts`, or when used for another `purpose`.
+- An email is saved on a user only after a code sent to it is verified.
 
 ## Working with migrations
 

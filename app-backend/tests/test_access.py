@@ -45,6 +45,7 @@ ROUTES = {
     ("POST", "/invitations/accept"): Access.PARENT_ACCOUNT,
     ("GET", "/households/{household_id}/kids"): Access.PARENT,
     ("POST", "/households/{household_id}/kids"): Access.ADMIN,
+    ("POST", "/households/{household_id}/kids/email-code"): Access.ADMIN,
     ("GET", "/households/{household_id}/kids/{kid_id}"): Access.PARENT,
     ("PATCH", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,
     ("DELETE", "/households/{household_id}/kids/{kid_id}"): Access.ADMIN,

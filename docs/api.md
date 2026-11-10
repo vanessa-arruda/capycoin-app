@@ -74,12 +74,12 @@ sequenceDiagram
     participant Email
 
     User->>API: POST /auth/otp/request {email}
-    API->>DB: invalidate earlier codes for this email,<br/>store hash of a new 6-digit code (10 min)
+    API->>DB: invalidate earlier login codes for this email,<br/>store hash of a new 6-digit code (10 min)
     API->>Email: send code
     API-->>User: 202 (same response whether or not an account exists)
 
     User->>API: POST /auth/otp/verify {email, code, display_name?}
-    API->>DB: find newest unused, unexpired code for email
+    API->>DB: find newest unused, unexpired login code for email
     alt wrong code
         API->>DB: attempts += 1 (code is dead after 5)
         API-->>User: 401
@@ -100,8 +100,9 @@ sequenceDiagram
 Rules:
 
 - Codes are 6 digits, valid for 10 minutes, usable once, and dead after 5 wrong attempts. Only a hash of the code is stored, and codes are compared in constant time.
-- Requesting a new code invalidates earlier unused codes for that email.
-- An email can request at most 3 codes per 15 minutes; more requests get 429.
+- Every code has a **purpose**: `login` (sent by `POST /auth/otp/request`) or `email_validation` (sent when a parent adds an email to a kid's account). A code works only for the purpose it was sent for, so a code from one email can't be used for the other action.
+- Requesting a new code invalidates earlier unused codes for that email and purpose.
+- An email can receive at most 3 codes per 15 minutes, counting every purpose; more requests get 429.
 - `POST /auth/otp/request` never reveals whether an account exists.
 - Sign-up always creates a **parent**. Kid accounts are only created by a household admin.
 
@@ -282,6 +283,7 @@ sequenceDiagram
 | Method | Path | Who | Status |
 |---|---|---|---|
 | GET | `/households/{hid}/kids` | parent | implemented |
+| POST | `/households/{hid}/kids/email-code` | admin | implemented |
 | POST | `/households/{hid}/kids` | admin | implemented |
 | GET | `/households/{hid}/kids/{kid_id}` | parent | implemented |
 | PATCH | `/households/{hid}/kids/{kid_id}` | admin | implemented |
@@ -289,12 +291,34 @@ sequenceDiagram
 | GET | `/households/{hid}/kids/{kid_id}/transactions` | parent | planned |
 | POST | `/households/{hid}/kids/{kid_id}/adjustments` | parent | planned |
 
-- `POST /kids` `{display_name, username, password}` → `201`. The kid logs in with the username and password. `409` if the username is taken.
-- Kid responses are `{id, display_name, username, balance, reserved, available}`. `balance` is the sum of the kid's credits in this household, `reserved` the cost of their pending prize claims, and `available` is `balance - reserved`.
+A kid logs in with a one-time code if they have an email, or with a username and password if they don't (or either, if they have both). An email is added only after the code sent to it is entered, so every email on an account is verified:
+
+```mermaid
+sequenceDiagram
+    actor Parent
+    participant API
+    participant Inbox as Kid's inbox
+
+    Parent->>API: POST /households/{hid}/kids/email-code {email}
+    API->>Inbox: 6-digit code (purpose email_validation)
+    API-->>Parent: 202
+    Parent->>API: POST /households/{hid}/kids {display_name, email, code, username?, password?}
+    alt code valid
+        API->>API: create the kid with the verified email
+        API-->>Parent: 201
+    else wrong, expired or used code
+        API-->>Parent: 422
+    end
+```
+
+Without this check a parent could set an address they don't own, and its owner would land in the kid's account when logging in with a code, and could not sign up with it.
+
+- `POST /kids/email-code` `{email}` → `202`. Sends a code to the address, saying who wants to add it and to which household. Same limits as login codes.
+- `POST /kids` `{display_name, email?, code?, username?, password?}` → `201`. Needs `email` with its `code`, or `username` and `password`, or both. A wrong code gives `422` (not `401`, which would mean the parent's session ended). `409` if the username or email is taken; the email check runs after the code check, so it reveals nothing to someone who can't read the inbox.
+- Kid responses are `{id, display_name, username, email, balance, reserved, available}`. `balance` is the sum of the kid's credits in this household, `reserved` the cost of their pending prize claims, and `available` is `balance - reserved`.
 - `GET /kids` lists the household's kids by name. `GET`, `PATCH` and `DELETE` on `/kids/{kid_id}` return `404` if the id is not a kid of this household.
-- `PATCH /kids/{kid_id}` `{display_name?, username?, password?}`. Omitted fields are unchanged; `null` gives `422`. Setting `password` revokes the kid's sessions.
+- `PATCH /kids/{kid_id}` `{display_name?, username?, password?, email?, code?}`. Omitted fields are unchanged. A new `email` needs a `code` from `POST /kids/email-code`. `"email": null` or `"username": null` removes it, as long as the kid can still log in (`422` otherwise). `null` for `display_name` or `password` gives `422`. Setting `password` revokes the kid's sessions.
 - `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). The account itself is deleted only if the kid belongs to no other household.
-- Kids have no email for now. A parent could otherwise set an address they don't own, and whoever later logs in with a code for that address would land in the kid's account. Kid emails will come with a verification step.
 - `GET /transactions` → paginated credit log, newest first, with the linked task or prize name.
 - `POST /adjustments` `{amount, note}` → `201`. `amount` is a non-zero integer, positive to add and negative to remove credits. A balance may go negative. The kid gets a notification.
 
@@ -395,7 +419,7 @@ Returns `{"status": "ok"}` when the API can reach the database.
 
 - Kid endpoints: seeing tasks, submitting with a photo, claiming prizes, wallet and notifications.
 - Photo upload and signed links to view photos.
-- Changing a user's email address, and kid emails (both need a verification step).
+- Changing a parent's own email address (it would reuse the `email_validation` code).
 - Adding an existing kid to a second household.
 - Transferring the admin role.
 - Email delivery through a real provider.
