@@ -37,6 +37,22 @@ make be-dev
 
 `make be-migrate` needs a `.env` at the repo root with the database settings (`username`, `password`, `host`, `port`, `dbname`). See [docs/database.md](docs/database.md) for the data model.
 
+### Container image
+
+```bash
+make be-image                    # builds capycoin-be:latest from app-backend/Containerfile
+podman run --rm --env-file .env capycoin-be alembic upgrade head
+podman run -d -p 8000:8000 --env-file .env capycoin-be
+```
+
+- **Contents:** the app, its dependencies and the Alembic migrations, running as a non-root user on port 8000. Tests, dev tools and `.env` are not included.
+- **Settings:** the image reads its settings from environment variables, so pass them with `--env-file` or `-e`. These are the same keys as `.env`, plus `cors_origins` and `app_url` (see `.env.example`).
+- **Migrations:** run them with the same image before starting a new version.
+- **Behind a reverse proxy:** set `FORWARDED_ALLOW_IPS` to the proxy's address, so rate limits see the client's IP and not the proxy's.
+- **More workers:** set `WEB_CONCURRENCY` to the number of worker processes.
+- **Health check:** the image calls `GET /health` every 30 seconds; Docker and Compose use it. Podman ignores health checks from the image, so pass `--health-cmd` there if you need one.
+- **Other build tools:** Podman and Buildah read `Containerfile` and `.containerignore`. With Docker, run `docker build -f Containerfile app-backend`; Docker does not read `.containerignore`, so tests and dev files end up in the image, but it still works. In Kubernetes, point a probe at `/health`.
+
 ## first steps
 
 - 1 - Set up  FastAPI app and simple hello world route;

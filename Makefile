@@ -3,6 +3,7 @@ BACKEND := uv run --directory app-backend
 DB_CONTAINER := capycoin-postgres
 DB_IMAGE := docker.io/library/postgres:17
 DB_PORT ?= 5432
+IMAGE ?= capycoin-be:latest
 
 be-install:
 	uv sync --directory app-backend
@@ -21,6 +22,9 @@ be-migrate:
 
 be-test:
 	$(BACKEND) pytest
+
+be-image:
+	podman build --format docker -f app-backend/Containerfile -t $(IMAGE) app-backend
 
 be-db-up:
 	podman container exists $(DB_CONTAINER) || podman create --name $(DB_CONTAINER) \

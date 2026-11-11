@@ -1,0 +1,37 @@
+# Build: make be-image (or podman build -t capycoin-be app-backend)
+FROM docker.io/library/python:3.15.2-slim AS build
+
+RUN pip install --no-cache-dir uv==0.13.7
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock .python-version ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+
+FROM docker.io/library/python:3.15.2-slim
+
+RUN useradd --system --uid 10001 --no-create-home capycoin
+WORKDIR /app
+# Owned by root, so the app cannot change its own code.
+COPY . .
+# After the code, so a local .venv can never replace the built one, even with
+# a build tool that does not read .containerignore.
+COPY --from=build /app/.venv /app/.venv
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+USER capycoin
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+
+# Behind a reverse proxy, set FORWARDED_ALLOW_IPS to the proxy's address so
+# rate limits see the client's IP. WEB_CONCURRENCY sets the number of workers.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
