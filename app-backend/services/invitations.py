@@ -12,6 +12,7 @@ from core.errors import Conflict, Forbidden, NotFound
 from core.security import hash_token, new_token
 from models import Household, HouseholdInvitation, HouseholdMember, User
 from models.enums import InvitationStatus
+from services import rate_limits
 
 INVITATION_TTL = timedelta(days=7)
 INVITATION_NOT_FOUND = "Invitation not found"
@@ -47,6 +48,7 @@ def create_invitation(
     )
     if is_member:
         raise Conflict("This person is already a member")
+    rate_limits.check(db, rate_limits.HOUSEHOLD_EMAILS, str(household.id))
 
     pending = db.scalar(
         select(HouseholdInvitation)
@@ -73,6 +75,7 @@ def create_invitation(
         created_at=now,
     )
     db.add(invitation)
+    rate_limits.record(db, rate_limits.HOUSEHOLD_EMAILS, str(household.id))
     try:
         db.commit()
     except IntegrityError:

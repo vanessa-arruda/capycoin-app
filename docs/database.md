@@ -83,6 +83,11 @@ erDiagram
         timestamptz last_used_at
         timestamptz revoked_at
     }
+    rate_limit_events {
+        uuid id PK
+        string key "limit name + SHA-256 of what it counts"
+        timestamptz created_at
+    }
     tasks {
         uuid id PK
         uuid household_id FK
@@ -274,6 +279,10 @@ There is one row per recipient. A notification links to what it is about through
 Supabase Auth cannot log in with a username alone, and kids may have no email. The backend handles login itself: `users.password_hash` for passwords, `otp_codes` for one-time codes sent by email, and `sessions` for logged-in clients. Only hashes of passwords, codes, session tokens and invitation tokens are stored.
 
 `otp_codes` is keyed by email, not by user, because a parent signs up by verifying a code before their account exists. Each code has a `purpose` (`login`, or `email_validation` for adding an email to a kid's account) and works only for it. Every email in `users` has been verified with a code: parents sign up with one, and a kid's email is saved only after the code sent to it is entered. It is not deleted with a user; codes expire within minutes. See [api.md](api.md) for how login and sessions work.
+
+### Rate limit events
+
+`rate_limit_events` has one row per counted action, such as a failed login. `key` is the name of the limit plus a SHA-256 of what it counts (a login, an IP address or a household id), so the table holds no emails, usernames or addresses. A limit counts the rows for its key newer than its window; rows older than a day are deleted whenever a new one is added. The limits are listed in [api.md](api.md#rate-limits).
 
 ### Row Level Security on every table
 

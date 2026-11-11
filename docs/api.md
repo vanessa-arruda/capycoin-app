@@ -127,7 +127,7 @@ sequenceDiagram
 - `login` is an email or a username. Both are matched in lowercase.
 - Every failure gives the same 401 message, so it does not reveal which accounts exist or which ones have a password.
 - Passwords are hashed with Argon2 (`pwdlib`). They must be 8 to 128 characters.
-- Repeated failures will be rate limited per login and per IP address (429). Not implemented yet; planned for the hardening step.
+- Repeated failures are rate limited per login and per IP address (429). See [Rate limits](#rate-limits).
 
 ### Sessions
 
@@ -186,6 +186,28 @@ Supabase publishes tables in the `public` schema through its REST API. The backe
 ### Email
 
 Emails (codes and invitations) go through the `EmailSender` interface in `app-backend/core/email/`. The backend is chosen by the `email_backend` setting. Today the only backend is `console`, which prints emails to the server output. A real provider will be a new module next to `console.py`; the console backend can then be removed without touching the code that sends emails.
+
+### Rate limits
+
+Limits are counted in the `rate_limit_events` table, so they hold across server processes. Each row stores only a SHA-256 of what it counts (a login, an IP address or a household id), never the value itself. Going over a limit gives `429` with `Too many attempts. Try again later.`
+
+| What | Limit | Why |
+|---|---|---|
+| Failed password logins for one login | 5 per 15 minutes | Stops guessing one account's password, even from many addresses. |
+| Failed password logins from one IP address | 20 per 15 minutes | Stops one address from trying many accounts. |
+| One-time codes sent to one email | 3 per 15 minutes | Stops flooding one inbox. Counts codes of every purpose. |
+| One-time code requests from one IP address | 10 per 15 minutes | Stops one address from sending codes to many inboxes. |
+| Emails sent by one household (invitations and kid email codes) | 20 per day | Stops a household from being used to send emails to strangers. |
+
+- Failed logins for accounts that don't exist count the same way, so a `429` reveals nothing about which accounts exist.
+- Someone who knows a login can lock its password login for 15 minutes by failing 5 times. Users with an email can still log in with a code; kids without email have to wait.
+- The IP address is the address of the connection. Behind a reverse proxy, run uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy address>`, or every request seems to come from the proxy and shares one limit.
+
+### Browser access and response headers
+
+- **CORS:** only the origins in the `cors_origins` setting (default `["http://localhost:5173"]`) can call the API from a browser. The token goes in the `Authorization` header; the API sets no cookies, so credentials mode is off.
+- **Headers on every response:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` (applied by browsers over HTTPS only), `Cache-Control: no-store` (responses hold personal data), and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The interactive docs at `/docs` and `/redoc` get no CSP, because they load scripts.
+- **No secrets in responses:** a test walks every response schema in the OpenAPI spec and fails if a field is named `password`, `password_hash`, `token_hash`, `code_hash` or `code`.
 
 ## Endpoints
 
@@ -276,7 +298,7 @@ sequenceDiagram
 - `GET` lists open invitations: pending and not expired, newest first. `DELETE` revokes a pending one (`204`); `404` if it is not pending.
 - `POST /invitations/accept` `{token}` → `200 {id, name, timezone}` of the household. `409` if the caller is already a member. Kid accounts get `403`.
 - Only the user whose email matches the invitation can accept it. Parents' emails are always verified, because parents sign up with a one-time code.
-- Sending invitations is not rate limited yet; planned for the hardening step.
+- Invitations count towards the household's email limit. See [Rate limits](#rate-limits).
 
 ### Kids and wallet
 

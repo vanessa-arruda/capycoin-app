@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from api.middleware import security_headers
 from api.routers import (
     approvals,
     auth,
@@ -14,6 +16,7 @@ from api.routers import (
     tasks,
     wallet,
 )
+from core.config import settings
 from core.errors import AppError, handle_app_error
 
 app = FastAPI(
@@ -22,6 +25,15 @@ app = FastAPI(
     version="0.1.0",
 )
 app.add_exception_handler(AppError, handle_app_error)
+app.middleware("http")(security_headers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    # The session token goes in the Authorization header; no cookies are used.
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,
+)
 
 
 @app.get("/")

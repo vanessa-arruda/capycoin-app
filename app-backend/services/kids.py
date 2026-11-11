@@ -20,7 +20,7 @@ from models import (
 )
 from models.enums import OtpPurpose, UserRole
 from schemas.kid import KidCreate, KidResponse, KidUpdate
-from services import auth, wallet
+from services import auth, rate_limits, wallet
 from services.users import commit_user_changes
 
 KID_NOT_FOUND = "Kid not found"
@@ -90,6 +90,7 @@ def _response(kid: User, balance: wallet.Balance) -> KidResponse:
 def send_email_code(
     db: Session, parent: HouseholdMember, email: str, sender: EmailSender
 ) -> None:
+    rate_limits.hit(db, rate_limits.HOUSEHOLD_EMAILS, str(parent.household_id))
     code = auth.issue_code(db, email, OtpPurpose.EMAIL_VALIDATION)
     sender.send(
         EmailMessage(

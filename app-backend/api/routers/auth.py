@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from api.deps import CurrentSession, Db
+from api.deps import ClientIp, CurrentSession, Db
 from core.email import EmailSender, get_email_sender
 from schemas.auth import OtpRequest, OtpVerify, PasswordLogin, SessionResponse
 from services import auth
@@ -27,8 +27,9 @@ def request_otp(
     payload: OtpRequest,
     db: Db,
     sender: Annotated[EmailSender, Depends(get_email_sender)],
+    ip: ClientIp,
 ) -> None:
-    auth.request_otp(db, payload.email, sender)
+    auth.request_otp(db, payload.email, sender, ip)
 
 
 @router.post(
@@ -45,9 +46,9 @@ def verify_otp(payload: OtpVerify, db: Db, response: Response) -> SessionRespons
 
 
 @router.post("/login")
-def login(payload: PasswordLogin, db: Db) -> SessionResponse:
+def login(payload: PasswordLogin, db: Db, ip: ClientIp) -> SessionResponse:
     return _session_response(
-        auth.login_with_password(db, payload.login, payload.password)
+        auth.login_with_password(db, payload.login, payload.password, ip)
     )
 
 

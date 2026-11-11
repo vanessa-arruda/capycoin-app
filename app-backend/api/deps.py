@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Iterator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,6 +23,15 @@ def get_db() -> Iterator[Session]:
 
 
 Db = Annotated[Session, Depends(get_db)]
+
+
+def get_client_ip(request: Request) -> str:
+    # Behind a proxy, run uvicorn with --proxy-headers and --forwarded-allow-ips
+    # set to the proxy, or every request appears to come from the proxy.
+    return request.client.host if request.client else "unknown"
+
+
+ClientIp = Annotated[str, Depends(get_client_ip)]
 
 _bearer = HTTPBearer(auto_error=False)
 

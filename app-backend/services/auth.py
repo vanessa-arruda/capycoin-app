@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import NoReturn
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,7 @@ from core.security import (
 )
 from models import OtpCode, User, UserSession
 from models.enums import OtpPurpose, UserRole
+from services import rate_limits
 
 OTP_TTL = timedelta(minutes=10)
 OTP_MAX_ATTEMPTS = 5
@@ -107,7 +109,8 @@ def check_code(db: Session, email: str, code: str, purpose: OtpPurpose) -> OtpCo
     return otp
 
 
-def request_otp(db: Session, email: str, sender: EmailSender) -> None:
+def request_otp(db: Session, email: str, sender: EmailSender, ip: str) -> None:
+    rate_limits.hit(db, rate_limits.CODE_REQUESTS_PER_IP, ip)
     code = issue_code(db, email, OtpPurpose.LOGIN)
     sender.send(
         EmailMessage(
@@ -147,19 +150,32 @@ def verify_otp(
     return new_session, created
 
 
-def login_with_password(db: Session, login: str, password: str) -> NewSession:
+def login_with_password(db: Session, login: str, password: str, ip: str) -> NewSession:
+    # Counted per login (guessing one account from many addresses) and per IP
+    # address (one address trying many accounts). Unknown logins count too, so
+    # the limit reveals nothing about which accounts exist.
+    rate_limits.check(db, rate_limits.LOGIN_FAILURES_PER_LOGIN, login)
+    rate_limits.check(db, rate_limits.LOGIN_FAILURES_PER_IP, ip)
+
     user = db.scalar(
         select(User).where(or_(User.email == login, User.username == login))
     )
     if user is None or user.password_hash is None:
         spend_verify_time()
-        raise Unauthorized(INVALID_LOGIN)
+        _login_failed(db, login, ip)
     if not verify_secret(password, user.password_hash):
-        raise Unauthorized(INVALID_LOGIN)
+        _login_failed(db, login, ip)
 
     new_session = create_session(db, user)
     db.commit()
     return new_session
+
+
+def _login_failed(db: Session, login: str, ip: str) -> NoReturn:
+    rate_limits.record(db, rate_limits.LOGIN_FAILURES_PER_LOGIN, login)
+    rate_limits.record(db, rate_limits.LOGIN_FAILURES_PER_IP, ip)
+    db.commit()
+    raise Unauthorized(INVALID_LOGIN)
 
 
 def authenticate(db: Session, token: str) -> UserSession:

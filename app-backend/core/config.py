@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     email_backend: Literal["console"] = "console"
     # Web app address, used for links in emails.
     app_url: str = "http://localhost:5173"
+    # Browser origins allowed to call the API (CORS). JSON list in .env.
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     @property
     def database_url(self) -> URL:
