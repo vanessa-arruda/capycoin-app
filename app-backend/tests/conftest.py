@@ -77,7 +77,12 @@ def db():
     """Session whose changes are rolled back after each test."""
     with engine.connect() as connection:
         transaction = connection.begin()
-        session = Session(bind=connection, join_transaction_mode="create_savepoint")
+        # autoflush=False like SessionLocal, so tests see what the app sees.
+        session = Session(
+            bind=connection,
+            autoflush=False,
+            join_transaction_mode="create_savepoint",
+        )
         yield session
         session.close()
         transaction.rollback()

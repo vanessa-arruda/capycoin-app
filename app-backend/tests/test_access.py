@@ -9,7 +9,7 @@ import pytest
 from core import clock
 from core.security import hash_token, new_token
 from main import app
-from models import HouseholdInvitation, Prize, Task
+from models import HouseholdInvitation, Prize, PrizeClaim, Task, TaskSubmission
 from models.enums import UserRole
 
 
@@ -61,6 +61,25 @@ ROUTES = {
     ("DELETE", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
     ("GET", "/households/{household_id}/kids/{kid_id}/transactions"): Access.PARENT,
     ("POST", "/households/{household_id}/kids/{kid_id}/adjustments"): Access.PARENT,
+    ("GET", "/households/{household_id}/task-submissions"): Access.PARENT,
+    (
+        "GET",
+        "/households/{household_id}/task-submissions/{submission_id}",
+    ): Access.PARENT,
+    ("POST", "/households/{household_id}/task-submissions/{submission_id}/approve"): (
+        Access.PARENT
+    ),
+    ("POST", "/households/{household_id}/task-submissions/{submission_id}/deny"): (
+        Access.PARENT
+    ),
+    ("GET", "/households/{household_id}/prize-claims"): Access.PARENT,
+    ("GET", "/households/{household_id}/prize-claims/{claim_id}"): Access.PARENT,
+    ("POST", "/households/{household_id}/prize-claims/{claim_id}/approve"): (
+        Access.PARENT
+    ),
+    ("POST", "/households/{household_id}/prize-claims/{claim_id}/deny"): (
+        Access.PARENT
+    ),
 }
 
 # Valid bodies for routes with record ids where {} is not enough, so requests
@@ -117,6 +136,23 @@ def make_prize(db, household):
     return prize
 
 
+def make_submission(db, household, kid):
+    task = make_task(db, household)
+    submission = TaskSubmission(
+        task_id=task.id, kid_id=kid.id, period_start=task.starts_on
+    )
+    db.add(submission)
+    db.commit()
+    return submission
+
+
+def make_claim(db, household, kid):
+    claim = PrizeClaim(prize_id=make_prize(db, household).id, kid_id=kid.id, cost=5)
+    db.add(claim)
+    db.commit()
+    return claim
+
+
 @pytest.fixture
 def home(db, make_user, make_household, auth_headers):
     """A household with each kind of caller, and an outsider with their own.
@@ -138,6 +174,8 @@ def home(db, make_user, make_household, auth_headers):
         "kid_id": kid.id,
         "task_id": make_task(db, household).id,
         "prize_id": make_prize(db, household).id,
+        "submission_id": make_submission(db, household, kid).id,
+        "claim_id": make_claim(db, household, kid).id,
     }
     foreign_ids = {
         "household_id": household.id,
@@ -146,6 +184,8 @@ def home(db, make_user, make_household, auth_headers):
         "kid_id": other_kid.id,
         "task_id": make_task(db, other).id,
         "prize_id": make_prize(db, other).id,
+        "submission_id": make_submission(db, other, other_kid).id,
+        "claim_id": make_claim(db, other, other_kid).id,
     }
     return {
         "ids": ids,

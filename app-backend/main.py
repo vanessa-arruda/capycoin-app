@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from api.routers import (
+    approvals,
     auth,
     health,
     households,
@@ -39,3 +40,5 @@ app.include_router(kids.router)
 app.include_router(tasks.router)
 app.include_router(prizes.router)
 app.include_router(wallet.router)
+app.include_router(approvals.submissions)
+app.include_router(approvals.claims)

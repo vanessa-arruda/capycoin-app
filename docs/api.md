@@ -361,18 +361,21 @@ Without this check a parent could set an address they don't own, and its owner w
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/households/{hid}/task-submissions` | parent | planned |
-| GET | `/households/{hid}/task-submissions/{submission_id}` | parent | planned |
-| POST | `/households/{hid}/task-submissions/{submission_id}/approve` | parent | planned |
-| POST | `/households/{hid}/task-submissions/{submission_id}/deny` | parent | planned |
-| GET | `/households/{hid}/prize-claims` | parent | planned |
-| GET | `/households/{hid}/prize-claims/{claim_id}` | parent | planned |
-| POST | `/households/{hid}/prize-claims/{claim_id}/approve` | parent | planned |
-| POST | `/households/{hid}/prize-claims/{claim_id}/deny` | parent | planned |
+| GET | `/households/{hid}/task-submissions` | parent | implemented |
+| GET | `/households/{hid}/task-submissions/{submission_id}` | parent | implemented |
+| POST | `/households/{hid}/task-submissions/{submission_id}/approve` | parent | implemented |
+| POST | `/households/{hid}/task-submissions/{submission_id}/deny` | parent | implemented |
+| GET | `/households/{hid}/prize-claims` | parent | implemented |
+| GET | `/households/{hid}/prize-claims/{claim_id}` | parent | implemented |
+| POST | `/households/{hid}/prize-claims/{claim_id}/approve` | parent | implemented |
+| POST | `/households/{hid}/prize-claims/{claim_id}/deny` | parent | implemented |
 
-- Lists filter by `?status=pending|approved|denied` (default `pending`) and `?kid_id=`, and are paginated.
-- `approve` and `deny` take `{note?}` and return the updated request. `409` if it is no longer pending.
-- A task approval credits the task's current `reward`. A prize approval debits the claim's `cost` and needs the kid's balance, minus their other pending claims, to cover it (`409` otherwise).
+- Lists filter by `?status=pending|approved|denied` (default `pending`) and `?kid_id=`, and are paginated, newest first.
+- Submissions are `{id, task_id, task_title, reward, kid_id, kid_display_name, period_start, status, note, submitted_at, reviewed_by, reviewed_at, review_note}`. `reward` is the task's current reward, which an approval credits.
+- Claims are `{id, prize_id, prize_name, cost, kid_id, kid_display_name, status, requested_at, reviewed_by, reviewed_at, review_note}`. `cost` was fixed when the kid claimed the prize.
+- `approve` and `deny` take an optional body `{note?}` (up to 500 characters, shown to the kid) and return the updated request. `409` if it is no longer pending. The kid gets a notification (`task_approved`, `task_denied`, `prize_claim_approved` or `prize_claim_denied`).
+- Requests for archived tasks and prizes can still be reviewed.
+- A task approval credits the task's current `reward`. A prize approval debits the claim's `cost` and needs the kid's balance, minus their other pending claims, to cover it (`409` otherwise). Pending claims keep their credits reserved: if a credit removal left a kid unable to cover all their pending claims, a parent denies one before approving another.
 
 ```mermaid
 sequenceDiagram
