@@ -9,6 +9,7 @@ from api.routers import (
     kids,
     me,
     members,
+    notifications,
     prizes,
     tasks,
     wallet,
@@ -42,3 +43,4 @@ app.include_router(prizes.router)
 app.include_router(wallet.router)
 app.include_router(approvals.submissions)
 app.include_router(approvals.claims)
+app.include_router(notifications.router)

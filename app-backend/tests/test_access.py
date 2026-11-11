@@ -33,6 +33,13 @@ ROUTES = {
     ("PATCH", "/me"): Access.LOGGED_IN,
     ("PUT", "/me/password"): Access.LOGGED_IN,
     ("GET", "/me/households"): Access.LOGGED_IN,
+    ("GET", "/me/notification-preferences"): Access.LOGGED_IN,
+    ("PUT", "/me/notification-preferences"): Access.LOGGED_IN,
+    ("GET", "/notifications"): Access.LOGGED_IN,
+    ("POST", "/notifications/read-all"): Access.LOGGED_IN,
+    # Only the recipient; tested in test_notifications.py.
+    ("GET", "/notifications/{notification_id}"): Access.LOGGED_IN,
+    ("POST", "/notifications/{notification_id}/read"): Access.LOGGED_IN,
     ("POST", "/households"): Access.PARENT_ACCOUNT,
     ("GET", "/households/{household_id}"): Access.MEMBER,
     ("PATCH", "/households/{household_id}"): Access.PARENT,
@@ -176,6 +183,7 @@ def home(db, make_user, make_household, auth_headers):
         "prize_id": make_prize(db, household).id,
         "submission_id": make_submission(db, household, kid).id,
         "claim_id": make_claim(db, household, kid).id,
+        "notification_id": uuid.uuid7(),
     }
     foreign_ids = {
         "household_id": household.id,

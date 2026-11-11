@@ -213,13 +213,13 @@ Emails (codes and invitations) go through the `EmailSender` interface in `app-ba
 | PATCH | `/me` | logged in | implemented |
 | PUT | `/me/password` | logged in | implemented |
 | GET | `/me/households` | logged in | implemented |
-| GET | `/me/notification-preferences` | logged in | planned |
-| PUT | `/me/notification-preferences` | logged in | planned |
+| GET | `/me/notification-preferences` | logged in | implemented |
+| PUT | `/me/notification-preferences` | logged in | implemented |
 
 - `PATCH /me` `{display_name?, username?}`. Omitted fields are unchanged; `"username": null` removes the username (`422` if the user has no email, since they could no longer log in). Usernames are 3 to 50 characters of `a-z 0-9 _ . -` and are stored in lowercase. `409` if the username is taken. Changing the email is not supported yet.
 - `PUT /me/password` `{current_password?, new_password}` → `204`. `current_password` is required when a password is already set; a missing or wrong one gives `422`. Revokes the user's other sessions.
 - `GET /me/households` → `[{id, name, timezone, is_admin}]`, the households the user belongs to, sorted by name.
-- `GET /me/notification-preferences` → every notification type and channel with its effective `enabled` value (defaults included). `PUT` takes `{preferences: [{type, channel, enabled}]}`.
+- `GET /me/notification-preferences` → `[{type, channel, enabled}]` for every type sent to the caller's account type and every channel, with defaults filled in. `PUT` takes `{preferences: [{type, channel, enabled}]}` (up to 50), saves them and returns the full list. A type that is not sent to the caller's account type gives `422`. Only choices that differ from the default are stored.
 
 ### Households and members
 
@@ -405,14 +405,20 @@ The lock on the kid's membership row makes concurrent approvals and claims for t
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/notifications` | logged in | planned |
-| GET | `/notifications/{notification_id}` | recipient | planned |
-| POST | `/notifications/{notification_id}/read` | recipient | planned |
-| POST | `/notifications/read-all` | logged in | planned |
+| GET | `/notifications` | logged in | implemented |
+| GET | `/notifications/{notification_id}` | recipient | implemented |
+| POST | `/notifications/{notification_id}/read` | recipient | implemented |
+| POST | `/notifications/read-all` | logged in | implemented |
 
+- Notifications are `{id, household_id, type, read_at, created_at, subject}`. `subject` summarizes what it is about, so a client can show it without another request: `{kind, id, kid_id, kid_display_name, title, status, amount, note}`.
+  - `kind` is `task_submission`, `prize_claim` or `credit_transaction`, and `id` is that record's id.
+  - `title` is the task title or prize name, and `status` the review status (both `null` for credit changes).
+  - `amount` is the task's reward, the claim's cost, or the credits added (positive) or removed (negative).
+  - `note` is the parent's review note or the adjustment note.
 - `GET /notifications` filters: `?household_id=`, `?unread=true`. Paginated, newest first. Only the caller's own notifications, from households they still belong to.
-- `GET /notifications/{id}` includes a summary of what it is about (the submission, claim or credit change). `404` for anyone but the recipient.
-- `POST /notifications/read-all` takes an optional `{household_id}`.
+- `GET /notifications/{id}` → one notification. `404` for anyone but the recipient, and for households the recipient left.
+- `POST /notifications/{id}/read` → `204`. Reading it again keeps the first `read_at`.
+- `POST /notifications/read-all` takes an optional `{household_id}` → `204`.
 
 Parents get `task_submitted` and `prize_claimed`. Kids get `task_approved`, `task_denied`, `prize_claim_approved`, `prize_claim_denied` and `credits_adjusted`. A notification is created only when the recipient has not turned off its `in_app` channel. Without a saved preference, `in_app` is on and `email` is off (no notification emails are sent yet).
 

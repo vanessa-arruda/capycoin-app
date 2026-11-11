@@ -1,11 +1,17 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, CreatedAt, UUIDPrimaryKey, enum_column
 from .enums import NotificationChannel, NotificationType
+
+if TYPE_CHECKING:
+    from .store import PrizeClaim
+    from .task import TaskSubmission
+    from .wallet import CreditTransaction
 
 
 class Notification(UUIDPrimaryKey, CreatedAt, Base):
@@ -33,6 +39,10 @@ class Notification(UUIDPrimaryKey, CreatedAt, Base):
         ForeignKey("credit_transactions.id", ondelete="CASCADE")
     )
     read_at: Mapped[datetime | None]
+
+    task_submission: Mapped[TaskSubmission | None] = relationship()
+    prize_claim: Mapped[PrizeClaim | None] = relationship()
+    credit_transaction: Mapped[CreditTransaction | None] = relationship()
 
 
 class NotificationPreference(Base):
