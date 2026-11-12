@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from core import clock
 from core.errors import Conflict, NotFound
+from core.storage import PhotoStore
 from models import (
     CreditTransaction,
     HouseholdMember,
@@ -22,6 +23,7 @@ from services.pagination import paginate
 SUBMISSION_NOT_FOUND = "Task submission not found"
 CLAIM_NOT_FOUND = "Prize claim not found"
 NOT_PENDING = "This request was already reviewed"
+NO_PHOTO = "This submission has no photo"
 
 
 def submission_response(submission: TaskSubmission) -> SubmissionResponse:
@@ -35,6 +37,7 @@ def submission_response(submission: TaskSubmission) -> SubmissionResponse:
         period_start=submission.period_start,
         status=submission.status,
         note=submission.note,
+        has_photo=submission.photo_path is not None,
         submitted_at=submission.submitted_at,
         reviewed_by=submission.reviewed_by,
         reviewed_at=submission.reviewed_at,
@@ -113,6 +116,16 @@ def get_submission(
     if submission is None:
         raise NotFound(SUBMISSION_NOT_FOUND)
     return submission
+
+
+def get_photo(
+    db: Session, household_id: uuid.UUID, submission_id: uuid.UUID, store: PhotoStore
+) -> bytes:
+    submission = get_submission(db, household_id, submission_id)
+    photo = store.read(submission.photo_path) if submission.photo_path else None
+    if photo is None:
+        raise NotFound(NO_PHOTO)
+    return photo
 
 
 def get_claim(db: Session, household_id: uuid.UUID, claim_id: uuid.UUID) -> PrizeClaim:

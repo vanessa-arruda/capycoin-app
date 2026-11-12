@@ -28,6 +28,7 @@ from core import clock, security  # noqa: E402
 from core.config import settings  # noqa: E402
 from core.database import engine  # noqa: E402
 from core.email import get_email_sender  # noqa: E402
+from core.storage import get_photo_store  # noqa: E402
 from core.security import hash_secret  # noqa: E402
 from main import app  # noqa: E402
 from models import Household, HouseholdMember, User  # noqa: E402
@@ -115,6 +116,29 @@ def outbox():
     app.dependency_overrides[get_email_sender] = lambda: outbox
     yield outbox
     app.dependency_overrides.pop(get_email_sender, None)
+
+
+class MemoryPhotoStore:
+    def __init__(self):
+        self.files = {}
+
+    def save(self, path, data) -> None:
+        self.files[path] = data
+
+    def read(self, path):
+        return self.files.get(path)
+
+    def delete(self, paths) -> None:
+        for path in paths:
+            self.files.pop(path, None)
+
+
+@pytest.fixture(autouse=True)
+def photo_store():
+    store = MemoryPhotoStore()
+    app.dependency_overrides[get_photo_store] = lambda: store
+    yield store
+    app.dependency_overrides.pop(get_photo_store, None)
 
 
 class FakeClock:

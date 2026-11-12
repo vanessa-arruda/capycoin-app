@@ -2,7 +2,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from core.errors import InvalidInput
-from models import Household, HouseholdMember, User
+from core.storage import PhotoStore
+from models import Household, HouseholdMember, Task, TaskSubmission, User
 from schemas.household import HouseholdCreate, HouseholdUpdate, MyHouseholdResponse
 
 
@@ -44,9 +45,19 @@ def update_household(
     return household
 
 
-def delete_household(db: Session, household: Household, confirm_name: str) -> None:
+def delete_household(
+    db: Session, household: Household, confirm_name: str, store: PhotoStore
+) -> None:
     if confirm_name != household.name:
         raise InvalidInput("confirm_name does not match the household name")
+    photo_paths = db.scalars(
+        select(TaskSubmission.photo_path)
+        .join(Task)
+        .where(
+            Task.household_id == household.id, TaskSubmission.photo_path.is_not(None)
+        )
+    ).all()
     # The database deletes everything in the household (ON DELETE CASCADE).
     db.execute(delete(Household).where(Household.id == household.id))
     db.commit()
+    store.delete(photo_paths)

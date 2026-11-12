@@ -5,6 +5,7 @@ from fastapi import Depends, status
 
 from api.deps import AdminMembership, Db, ParentMembership, household_router
 from core.email import EmailSender, get_email_sender
+from core.storage import PhotoStore, get_photo_store
 from schemas.kid import KidCreate, KidEmailCode, KidResponse, KidUpdate
 from services import kids
 
@@ -47,5 +48,10 @@ def update_kid(
 
 
 @router.delete("/{kid_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_kid(kid_id: uuid.UUID, membership: AdminMembership, db: Db) -> None:
-    kids.remove_kid(db, membership.household_id, kid_id)
+def remove_kid(
+    kid_id: uuid.UUID,
+    membership: AdminMembership,
+    db: Db,
+    store: Annotated[PhotoStore, Depends(get_photo_store)],
+) -> None:
+    kids.remove_kid(db, membership.household_id, kid_id, store)

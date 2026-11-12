@@ -81,6 +81,10 @@ ROUTES = {
         "GET",
         "/households/{household_id}/task-submissions/{submission_id}",
     ): Access.PARENT,
+    (
+        "GET",
+        "/households/{household_id}/task-submissions/{submission_id}/photo",
+    ): Access.PARENT,
     ("POST", "/households/{household_id}/task-submissions/{submission_id}/approve"): (
         Access.PARENT
     ),
@@ -164,11 +168,15 @@ def make_prize(db, household):
     return prize
 
 
-def make_submission(db, household, kid):
+def make_submission(db, household, kid, photo_store):
     task = make_task(db, household)
     submission = TaskSubmission(
-        task_id=task.id, kid_id=kid.id, period_start=task.starts_on
+        task_id=task.id,
+        kid_id=kid.id,
+        period_start=task.starts_on,
+        photo_path=f"{household.id}/{uuid.uuid7()}.jpg",
     )
+    photo_store.save(submission.photo_path, b"photo")
     db.add(submission)
     db.commit()
     return submission
@@ -182,7 +190,7 @@ def make_claim(db, household, kid):
 
 
 @pytest.fixture
-def home(db, make_user, make_household, auth_headers):
+def home(db, make_user, make_household, auth_headers, photo_store):
     """A household with each kind of caller, and an outsider with their own.
 
     `ids` fills path placeholders with records of the household; `foreign_ids`
@@ -202,7 +210,7 @@ def home(db, make_user, make_household, auth_headers):
         "kid_id": kid.id,
         "task_id": make_task(db, household, kid).id,
         "prize_id": make_prize(db, household).id,
-        "submission_id": make_submission(db, household, kid).id,
+        "submission_id": make_submission(db, household, kid, photo_store).id,
         "claim_id": make_claim(db, household, kid).id,
         "notification_id": uuid.uuid7(),
     }
@@ -213,7 +221,7 @@ def home(db, make_user, make_household, auth_headers):
         "kid_id": other_kid.id,
         "task_id": make_task(db, other, other_kid).id,
         "prize_id": make_prize(db, other).id,
-        "submission_id": make_submission(db, other, other_kid).id,
+        "submission_id": make_submission(db, other, other_kid, photo_store).id,
         "claim_id": make_claim(db, other, other_kid).id,
     }
     return {

@@ -11,6 +11,9 @@ venv/
 # Environment variables
 .env
 
+# Photos from the local photo backend
+.photos/
+
 
 # VSCode settings
 .vscode/

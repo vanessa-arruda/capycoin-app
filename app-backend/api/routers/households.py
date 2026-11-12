@@ -1,4 +1,6 @@
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
 
 from api.deps import (
     AdminMembership,
@@ -8,6 +10,7 @@ from api.deps import (
     ParentUser,
     household_router,
 )
+from core.storage import PhotoStore, get_photo_store
 from schemas.household import (
     HouseholdCreate,
     HouseholdDelete,
@@ -43,6 +46,9 @@ def update_household(
 
 @household.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def delete_household(
-    payload: HouseholdDelete, membership: AdminMembership, db: Db
+    payload: HouseholdDelete,
+    membership: AdminMembership,
+    db: Db,
+    store: Annotated[PhotoStore, Depends(get_photo_store)],
 ) -> None:
-    households.delete_household(db, membership.household, payload.confirm_name)
+    households.delete_household(db, membership.household, payload.confirm_name, store)

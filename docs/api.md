@@ -201,7 +201,7 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 | One-time codes sent to one email | 3 per 15 minutes | Stops flooding one inbox. Counts codes of every purpose. |
 | One-time code requests from one IP address | 10 per 15 minutes | Stops one address from sending codes to many inboxes. |
 | Emails sent by one household (invitations and kid email codes) | 20 per day | Stops a household from being used to send emails to strangers. |
-| Photo uploads by one kid (planned) | 30 per day | Keeps storage use in check. |
+| Photo uploads by one kid | 30 per day | Keeps storage use in check. |
 
 - Failed logins for accounts that don't exist count the same way, so a `429` reveals nothing about which accounts exist.
 - Someone who knows a login can lock its password login for 15 minutes by failing 5 times. Users with an email can still log in with a code; kids without email have to wait.
@@ -397,7 +397,7 @@ Without this check a parent could set an address they don't own, and its owner w
 | POST | `/households/{hid}/prize-claims/{claim_id}/deny` | parent | implemented |
 
 - Lists filter by `?status=pending|approved|denied` (default `pending`) and `?kid_id=`, and are paginated, newest first.
-- Submissions are `{id, task_id, task_title, reward, kid_id, kid_display_name, period_start, status, note, submitted_at, reviewed_by, reviewed_at, review_note}`. `reward` is the task's current reward, which an approval credits.
+- Submissions are `{id, task_id, task_title, reward, kid_id, kid_display_name, period_start, status, note, has_photo, submitted_at, reviewed_by, reviewed_at, review_note}`. `reward` is the task's current reward, which an approval credits.
 - Claims are `{id, prize_id, prize_name, cost, kid_id, kid_display_name, status, requested_at, reviewed_by, reviewed_at, review_note}`. `cost` was fixed when the kid claimed the prize.
 - `approve` and `deny` take an optional body `{note?}` (up to 500 characters, shown to the kid) and return the updated request. `409` if it is no longer pending. The kid gets a notification (`task_approved`, `task_denied`, `prize_claim_approved` or `prize_claim_denied`).
 - Requests for archived tasks and prizes can still be reviewed.
@@ -456,8 +456,8 @@ Endpoints for a kid, about their own tasks, wallet and prizes in one household. 
 |---|---|---|---|
 | GET | `/households/{hid}/me/tasks` | kid | implemented |
 | GET | `/households/{hid}/me/tasks/{task_id}` | kid | implemented |
-| POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | implemented, without `photo` |
-| GET | `/households/{hid}/task-submissions/{submission_id}/photo` | parent | planned |
+| POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | implemented |
+| GET | `/households/{hid}/task-submissions/{submission_id}/photo` | parent | implemented |
 | GET | `/households/{hid}/me/wallet` | kid | implemented |
 | GET | `/households/{hid}/me/transactions` | kid | implemented |
 | GET | `/households/{hid}/me/prizes` | kid | implemented |
@@ -501,7 +501,7 @@ flowchart TD
 
 - JPEG, PNG or WebP, up to 10 MB, checked by reading the file, not by trusting its name or `Content-Type`. Anything else gives `422`.
 - The backend re-encodes the image as JPEG, at most 2048 px on the long side. That drops all metadata, including the GPS location phones add to photos, which matters for photos taken by kids at home.
-- Files go through a `PhotoStore` interface in `core/storage/`, chosen by a `photo_backend` setting, like email. A `local` backend writes to a folder for development; the production backend (Supabase Storage or any S3-compatible store) is added behind the same interface. The database keeps only the path.
+- Files go through a `PhotoStore` interface in `core/storage/`, chosen by a `photo_backend` setting, like email. A `local` backend writes to the folder in the `photo_dir` setting (default `.photos/` at the repo root) for development; the production backend (Supabase Storage or any S3-compatible store) is added behind the same interface. The database keeps only the path.
 - `GET /households/{hid}/task-submissions/{submission_id}/photo` returns the image to a parent of the household, with the usual access checks, and `404` when the submission has no photo. The image is served by the backend instead of through a public or signed storage link, so the same household check covers it. The web app fetches it with the `Authorization` header and shows it from a blob URL.
 - Storage is outside the database, so deleting a submission, a kid or a household does not remove photos by itself. The services that delete them also delete the photos.
 - Photo uploads count towards a limit of 30 per kid per day. See [Rate limits](#rate-limits).
@@ -565,3 +565,5 @@ Returns `{"status": "ok"}` when the API can reach the database.
 - Adding an existing kid to a second household.
 - Transferring the admin role.
 - Email delivery through a real provider.
+- A production photo backend. Only `local` exists, and it is not meant for the container image.
+- A request size limit. The app reads a whole upload before it checks access, so the reverse proxy in front of it should reject bodies over about 11 MB.

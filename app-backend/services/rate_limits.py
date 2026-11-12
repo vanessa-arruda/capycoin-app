@@ -21,6 +21,7 @@ LOGIN_FAILURES_PER_LOGIN = Limit("login", 5, timedelta(minutes=15))
 LOGIN_FAILURES_PER_IP = Limit("login-ip", 20, timedelta(minutes=15))
 CODE_REQUESTS_PER_IP = Limit("code-ip", 10, timedelta(minutes=15))
 HOUSEHOLD_EMAILS = Limit("household-email", 20, timedelta(days=1))
+PHOTO_UPLOADS_PER_KID = Limit("photo-kid", 30, timedelta(days=1))
 
 # Events older than the longest window are never counted again.
 KEEP_EVENTS_FOR = timedelta(days=1)

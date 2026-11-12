@@ -1,6 +1,10 @@
 import uuid
+from typing import Annotated
+
+from fastapi import Depends, Response
 
 from api.deps import Db, Pagination, ParentMembership, household_router
+from core.storage import PhotoStore, get_photo_store
 from models.enums import ReviewStatus
 from schemas.approval import ClaimResponse, ReviewDecision, SubmissionResponse
 from schemas.common import Page
@@ -8,6 +12,8 @@ from services import approvals
 
 submissions = household_router("/task-submissions", tags=["approvals"])
 claims = household_router("/prize-claims", tags=["approvals"])
+
+PHOTO_SCHEMA = {"type": "string", "format": "binary"}
 
 
 @submissions.get("")
@@ -28,6 +34,21 @@ def get_submission(
     return approvals.submission_response(
         approvals.get_submission(db, membership.household_id, submission_id)
     )
+
+
+@submissions.get(
+    "/{submission_id}/photo",
+    response_class=Response,
+    responses={200: {"content": {"image/jpeg": {"schema": PHOTO_SCHEMA}}}},
+)
+def get_submission_photo(
+    submission_id: uuid.UUID,
+    membership: ParentMembership,
+    db: Db,
+    store: Annotated[PhotoStore, Depends(get_photo_store)],
+) -> Response:
+    photo = approvals.get_photo(db, membership.household_id, submission_id, store)
+    return Response(photo, media_type="image/jpeg")
 
 
 @submissions.post("/{submission_id}/approve")

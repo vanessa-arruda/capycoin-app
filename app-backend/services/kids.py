@@ -7,6 +7,7 @@ from core import clock
 from core.email import EmailMessage, EmailSender
 from core.errors import InvalidInput, NotFound, Unauthorized
 from core.security import hash_secret
+from core.storage import PhotoStore
 from models import (
     CreditTransaction,
     HouseholdMember,
@@ -159,7 +160,9 @@ def update_kid(
     return kid
 
 
-def remove_kid(db: Session, household_id: uuid.UUID, kid_id: uuid.UUID) -> None:
+def remove_kid(
+    db: Session, household_id: uuid.UUID, kid_id: uuid.UUID, store: PhotoStore
+) -> None:
     """Remove a kid and their data from one household.
 
     The account is deleted too when the kid belongs to no other household.
@@ -167,6 +170,13 @@ def remove_kid(db: Session, household_id: uuid.UUID, kid_id: uuid.UUID) -> None:
     get_kid(db, household_id, kid_id)
     tasks = select(Task.id).where(Task.household_id == household_id)
     prizes = select(Prize.id).where(Prize.household_id == household_id)
+    photo_paths = db.scalars(
+        select(TaskSubmission.photo_path).where(
+            TaskSubmission.kid_id == kid_id,
+            TaskSubmission.task_id.in_(tasks),
+            TaskSubmission.photo_path.is_not(None),
+        )
+    ).all()
 
     # Credits first: they reference submissions and claims without cascading.
     db.execute(
@@ -205,3 +215,5 @@ def remove_kid(db: Session, household_id: uuid.UUID, kid_id: uuid.UUID) -> None:
     if not db.scalar(select(exists().where(HouseholdMember.user_id == kid_id))):
         db.execute(delete(User).where(User.id == kid_id))
     db.commit()
+    # After the commit, so a failed delete never leaves rows without their photo.
+    store.delete(photo_paths)

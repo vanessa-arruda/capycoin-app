@@ -12,10 +12,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from core import clock
 from core.errors import Conflict, NotFound
+from core.storage import PhotoStore
 from models import HouseholdMember, Task, TaskAssignment, TaskSubmission
 from models.enums import NotificationType, Recurrence, ReviewStatus
 from schemas.kid_task import KidSubmissionResponse, KidTaskResponse
-from services import notifications
+from services import notifications, photos, rate_limits
 from services.tasks import TASK_NOT_FOUND
 
 ALREADY_SUBMITTED = "This task is already done or waiting for a parent"
@@ -167,7 +168,12 @@ def get_task(db: Session, kid: HouseholdMember, task_id: uuid.UUID) -> KidTaskRe
 
 
 def submit(
-    db: Session, kid: HouseholdMember, task_id: uuid.UUID, note: str | None
+    db: Session,
+    kid: HouseholdMember,
+    task_id: uuid.UUID,
+    note: str | None,
+    photo: bytes | None,
+    store: PhotoStore,
 ) -> TaskSubmission:
     task = _get_task(db, kid, task_id)
     today = household_today(kid.household.timezone)
@@ -185,6 +191,9 @@ def submit(
     )
     if active is not None:
         raise Conflict(ALREADY_SUBMITTED)
+    if photo is not None:
+        rate_limits.hit(db, rate_limits.PHOTO_UPLOADS_PER_KID, str(kid.user_id))
+        photo = photos.clean(photo)
 
     submission = TaskSubmission(
         task_id=task.id,
@@ -201,11 +210,19 @@ def submit(
         db.rollback()
         raise Conflict(ALREADY_SUBMITTED)
 
+    if photo is not None:
+        submission.photo_path = photos.path_for(kid.household_id, submission.id)
+        store.save(submission.photo_path, photo)
     notifications.notify_parents(
         db,
         kid.household_id,
         NotificationType.TASK_SUBMITTED,
         task_submission_id=submission.id,
     )
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        if submission.photo_path is not None:
+            store.delete([submission.photo_path])
+        raise
     return submission

@@ -24,6 +24,7 @@ class SubmissionResponse(BaseModel):
     period_start: date
     status: ReviewStatus
     note: str | None
+    has_photo: bool
     submitted_at: datetime
     reviewed_by: uuid.UUID | None
     reviewed_at: datetime | None
