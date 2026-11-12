@@ -91,6 +91,15 @@ def require_parent(membership: Membership) -> HouseholdMember:
 ParentMembership = Annotated[HouseholdMember, Depends(require_parent)]
 
 
+def require_kid(membership: Membership) -> HouseholdMember:
+    if membership.user.role != UserRole.KID:
+        raise Forbidden("Only kids of this household can do this")
+    return membership
+
+
+KidMembership = Annotated[HouseholdMember, Depends(require_kid)]
+
+
 def require_admin(membership: ParentMembership) -> HouseholdMember:
     if not membership.is_admin:
         raise Forbidden("Only the household admin can do this")

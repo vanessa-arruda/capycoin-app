@@ -454,9 +454,9 @@ Endpoints for a kid, about their own tasks, wallet and prizes in one household. 
 
 | Method | Path | Who | Status |
 |---|---|---|---|
-| GET | `/households/{hid}/me/tasks` | kid | planned |
-| GET | `/households/{hid}/me/tasks/{task_id}` | kid | planned |
-| POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | planned |
+| GET | `/households/{hid}/me/tasks` | kid | implemented |
+| GET | `/households/{hid}/me/tasks/{task_id}` | kid | implemented |
+| POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | implemented, without `photo` |
 | GET | `/households/{hid}/task-submissions/{submission_id}/photo` | parent | planned |
 | GET | `/households/{hid}/me/wallet` | kid | planned |
 | GET | `/households/{hid}/me/transactions` | kid | planned |

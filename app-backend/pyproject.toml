@@ -10,6 +10,7 @@ dependencies = [
     "psycopg2-binary>=2.9.13",
     "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.16.2",
+    "python-multipart>=0.0.33",
     "sqlalchemy>=2.1.8",
     "tzdata>=2026.6",
     "uvicorn>=0.54.0",

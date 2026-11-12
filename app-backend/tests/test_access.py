@@ -9,7 +9,14 @@ import pytest
 from core import clock
 from core.security import hash_token, new_token
 from main import app
-from models import HouseholdInvitation, Prize, PrizeClaim, Task, TaskSubmission
+from models import (
+    HouseholdInvitation,
+    Prize,
+    PrizeClaim,
+    Task,
+    TaskAssignment,
+    TaskSubmission,
+)
 from models.enums import UserRole
 
 
@@ -20,6 +27,7 @@ class Access(StrEnum):
     MEMBER = "member"
     PARENT = "parent of the household"
     ADMIN = "admin of the household"
+    KID = "kid of the household"
 
 
 ROUTES = {
@@ -87,6 +95,9 @@ ROUTES = {
     ("POST", "/households/{household_id}/prize-claims/{claim_id}/deny"): (
         Access.PARENT
     ),
+    ("GET", "/households/{household_id}/me/tasks"): Access.KID,
+    ("GET", "/households/{household_id}/me/tasks/{task_id}"): Access.KID,
+    ("POST", "/households/{household_id}/me/tasks/{task_id}/submissions"): Access.KID,
 }
 
 # Valid bodies for routes with record ids where {} is not enough, so requests
@@ -98,11 +109,12 @@ BODIES = {
     },
 }
 
-HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN)
+HOUSEHOLD_LEVELS = (Access.MEMBER, Access.PARENT, Access.ADMIN, Access.KID)
 ALLOWED = {
     Access.MEMBER: ("kid", "parent", "admin"),
     Access.PARENT: ("parent", "admin"),
     Access.ADMIN: ("admin",),
+    Access.KID: ("kid",),
 }
 DENIED = {401, 403, 404}
 
@@ -127,9 +139,13 @@ def invite(db, household, email):
     return invitation
 
 
-def make_task(db, household):
+def make_task(db, household, kid=None):
     task = Task(
-        household_id=household.id, title="Dishes", reward=5, starts_on=date.today()
+        household_id=household.id,
+        title="Dishes",
+        reward=5,
+        starts_on=date.today() - timedelta(days=1),
+        assignments=[TaskAssignment(kid_id=kid.id)] if kid else [],
     )
     db.add(task)
     db.commit()
@@ -179,7 +195,7 @@ def home(db, make_user, make_household, auth_headers):
         "user_id": parent.id,
         "invitation_id": invite(db, household, "new@example.com").id,
         "kid_id": kid.id,
-        "task_id": make_task(db, household).id,
+        "task_id": make_task(db, household, kid).id,
         "prize_id": make_prize(db, household).id,
         "submission_id": make_submission(db, household, kid).id,
         "claim_id": make_claim(db, household, kid).id,
@@ -190,7 +206,7 @@ def home(db, make_user, make_household, auth_headers):
         "user_id": outsider.id,
         "invitation_id": invite(db, other, "new@example.com").id,
         "kid_id": other_kid.id,
-        "task_id": make_task(db, other).id,
+        "task_id": make_task(db, other, other_kid).id,
         "prize_id": make_prize(db, other).id,
         "submission_id": make_submission(db, other, other_kid).id,
         "claim_id": make_claim(db, other, other_kid).id,
@@ -250,12 +266,13 @@ def test_unknown_household_gets_404(client, home, method, path):
     [route for route in routes(*HOUSEHOLD_LEVELS) if route.values[1].count("{") > 1],
 )
 def test_record_of_another_household_gets_404(client, home, method, path):
+    caller = "kid" if ROUTES[(method, path)] == Access.KID else "admin"
     response = call(
         client,
         method,
         path,
         home["foreign_ids"],
-        home["headers"]["admin"],
+        home["headers"][caller],
         json=BODIES.get((method, path), {}),
     )
 
