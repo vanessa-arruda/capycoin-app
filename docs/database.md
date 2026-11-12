@@ -236,6 +236,8 @@ WHERE p.household_id = :household_id AND pc.kid_id = :kid_id AND pc.status = 'pe
 -- available = balance - reserved
 ```
 
+A kid can have one pending claim per prize, so a double tap does not reserve the cost twice. A partial unique index on `prize_claims (prize_id, kid_id) WHERE status = 'pending'` will enforce it, like the one on submissions (planned with the kid endpoints).
+
 To stop two requests from spending the same credits at the same time, any code that changes a kid's credits or reserved credits (claims, approvals, adjustments) must first lock the kid's membership row: `SELECT ... FROM household_members WHERE household_id = :h AND user_id = :kid FOR UPDATE`. `services.wallet.lock_kid` does this.
 
 ### Tasks, assignments and recurring tasks
@@ -244,8 +246,8 @@ To stop two requests from spending the same credits at the same time, any code t
 - `recurrence` is `none`, `daily`, `weekly` or `monthly`.
 - `period_start` on a submission says which occurrence it is for: the start of the day, week or month for recurring tasks, and the task's `starts_on` for one-off tasks. A partial unique index allows one active (pending or approved) submission per kid, task and period. After a denial the kid can submit again.
 - `due_at` is the deadline for a one-off task. For a recurring task it is when it stops repeating.
-- `households.timezone` (an IANA name such as `Europe/Stockholm`) decides when a day, week or month starts.
-- A submission's photo lives in object storage. The database stores only its path.
+- `households.timezone` (an IANA name such as `Europe/Stockholm`) decides when a day, week or month starts. Weeks start on Monday.
+- A submission's photo lives in object storage. The database stores only its path. Deleting rows does not reach storage, so the code that deletes submissions, kids or households also deletes their photos.
 
 ### Times and dates
 

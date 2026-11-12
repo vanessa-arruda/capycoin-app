@@ -1,13 +1,13 @@
 # API
 
-This document describes the Capycoin backend API: how users sign up and log in, how sessions work, who can do what, and every endpoint for the parents' features. The data model behind it is in [database.md](database.md).
+This document describes the Capycoin backend API: how users sign up and log in, how sessions work, who can do what, and every endpoint for the parents' and kids' features. The data model behind it is in [database.md](database.md).
 
 **Status:** the API is being built in steps. The status column of each endpoint table says what exists today. Everything else in this document is the agreed design; update the status column as endpoints are implemented.
 
 ## Conventions
 
 - **Base URL:** the backend root, for example `http://localhost:8000` in development.
-- **Format:** JSON request and response bodies.
+- **Format:** JSON request and response bodies, except a kid's task submission, which is `multipart/form-data` so it can carry a photo.
 - **Authentication:** every endpoint except the public auth endpoints needs an `Authorization: Bearer <session token>` header.
 - **IDs:** UUIDs (version 7, ordered by creation time).
 - **Times:** moments are ISO 8601 in UTC, for example `2026-11-10T09:30:00Z`; requests must include an offset (`Z` or `+01:00`), or get `422`. Calendar days (such as a task's `starts_on`) are `YYYY-MM-DD` in the household's timezone. See [Times and dates](database.md#times-and-dates).
@@ -54,8 +54,11 @@ Permissions depend on the role **in the household of the request**. A parent who
 | Manage prizes | ✅ | ✅ | 403 | 404 |
 | Approve or deny task submissions and prize claims | ✅ | ✅ | 403 | 404 |
 | Own account, notifications and notification settings | ✅ | ✅ | ✅ | n/a |
+| See own tasks and mark them done | 403 | 403 | ✅ | 404 |
+| See the prize store and claim prizes | 403 | 403 | ✅ | 404 |
+| See own wallet, history and claims | 403 | 403 | ✅ | 404 |
 
-Kid endpoints (seeing their tasks, submitting, claiming prizes) are not part of this document yet.
+Kids use their own endpoints under `/households/{hid}/me/` (see [Kid app](#kid-app)), never the parents' ones with a filter. A kid's responses then cannot carry other kids' data by mistake, and the access table keeps one rule per route.
 
 ## Authentication
 
@@ -172,7 +175,7 @@ How this is built, and what every new endpoint must follow:
 
 1. `get_current_user` reads the bearer token and loads the user, or returns 401.
 2. Household routers are created with `household_router()` from `api/deps.py`. It mounts them under `/households/{household_id}` with a router-level dependency (`get_membership`) that loads the caller's membership, or returns 404. It runs for every endpoint in the router, so an endpoint cannot skip it.
-3. Endpoints declare the role they need with a parameter type: `Membership` (any member), `ParentMembership` (a parent of the household, else 403) or `AdminMembership` (the admin, else 403). `ParentUser` is for routes outside a household that need a parent account, such as creating one. These checks run before the request body is validated, so a caller without access never learns what the body should look like.
+3. Endpoints declare the role they need with a parameter type: `Membership` (any member), `ParentMembership` (a parent of the household, else 403) or `AdminMembership` (the admin, else 403). Kid app routes use `KidMembership` (a kid of the household, else 403). `ParentUser` is for routes outside a household that need a parent account, such as creating one. These checks run before the request body is validated, so a caller without access never learns what the body should look like.
 4. Records are always loaded with the household in the query, for example `WHERE tasks.id = :id AND tasks.household_id = :household_id`. Submissions and claims are joined to their task or prize to check the household. Never load a record by id alone and check afterwards.
 5. IDs in request bodies (such as `kid_ids`) are checked against the household's members too.
 6. Endpoints outside households (`/me`, `/notifications`) always filter by the caller's own user id.
@@ -198,6 +201,7 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 | One-time codes sent to one email | 3 per 15 minutes | Stops flooding one inbox. Counts codes of every purpose. |
 | One-time code requests from one IP address | 10 per 15 minutes | Stops one address from sending codes to many inboxes. |
 | Emails sent by one household (invitations and kid email codes) | 20 per day | Stops a household from being used to send emails to strangers. |
+| Photo uploads by one kid (planned) | 30 per day | Keeps storage use in check. |
 
 - Failed logins for accounts that don't exist count the same way, so a `429` reveals nothing about which accounts exist.
 - Someone who knows a login can lock its password login for 15 minutes by failing 5 times. Users with an email can still log in with a code; kids without email have to wait.
@@ -444,6 +448,107 @@ The lock on the kid's membership row makes concurrent approvals and claims for t
 
 Parents get `task_submitted` and `prize_claimed`. Kids get `task_approved`, `task_denied`, `prize_claim_approved`, `prize_claim_denied` and `credits_adjusted`. A notification is created only when the recipient has not turned off its `in_app` channel. Without a saved preference, `in_app` is on and `email` is off (no notification emails are sent yet).
 
+### Kid app
+
+Endpoints for a kid, about their own tasks, wallet and prizes in one household. A kid in several households calls them once per household (from `GET /me/households`). Parents get `403` on all of them.
+
+| Method | Path | Who | Status |
+|---|---|---|---|
+| GET | `/households/{hid}/me/tasks` | kid | planned |
+| GET | `/households/{hid}/me/tasks/{task_id}` | kid | planned |
+| POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | planned |
+| GET | `/households/{hid}/task-submissions/{submission_id}/photo` | parent | planned |
+| GET | `/households/{hid}/me/wallet` | kid | planned |
+| GET | `/households/{hid}/me/transactions` | kid | planned |
+| GET | `/households/{hid}/me/prizes` | kid | planned |
+| POST | `/households/{hid}/me/prizes/{prize_id}/claims` | kid | planned |
+| GET | `/households/{hid}/me/prize-claims` | kid | planned |
+
+#### Tasks
+
+A task assigned to someone else, or archived, gives `404` to the kid, the same as a task in another household.
+
+```mermaid
+flowchart TD
+    A[Task assigned to the kid, not archived] --> S{starts_on is today or earlier?}
+    S -- no --> H[Not listed]
+    S -- yes --> R{Recurring?}
+    R -- yes --> E{due_at passed?}
+    E -- yes --> H
+    E -- no --> C[Listed for the current period,<br/>with that period's latest submission]
+    R -- no --> P{Has an approved submission?}
+    P -- yes --> H
+    P -- no --> D{due_at passed and<br/>nothing pending?}
+    D -- yes --> H
+    D -- no --> O[Listed, with its latest submission]
+```
+
+- "Today" and the current period are worked out in the household's timezone. A period is a day, a week starting on Monday, or a calendar month. A one-off task has one period, starting on `starts_on`.
+- `GET /me/tasks` → the tasks the flowchart lists, not paginated, since it holds only what is current. Sorted with tasks to do first, then the ones waiting for a parent, then the ones done for this period.
+- Each task is `{id, title, description, reward, recurrence, starts_on, due_at, period_start, period_end, submission}`. `period_end` is the last day of the current period (`null` for one-off tasks, which use `due_at`). `submission` is the latest submission for the current period, or `null`: `{id, status, note, has_photo, submitted_at, reviewed_at, review_note, reviewed_by_name}`. A denied submission stays visible, so the kid can read the note and send it again.
+- `GET /me/tasks/{task_id}` → the same object for one task. It also works for a listed-then-hidden task (approved one-off, ended recurring), so a link from a notification keeps working.
+
+#### Marking a task done
+
+`POST /me/tasks/{task_id}/submissions` takes `multipart/form-data` with an optional `note` (up to 500 characters) and an optional `photo` file. It returns `201` with the submission.
+
+- The submission is for the current period. A kid cannot send one for a past period.
+- `409` if the task has not started, is past `due_at`, or already has a pending or approved submission for this period. The unique index on submissions also catches two requests sent at the same time, and that gives `409` too.
+- Every parent of the household gets a `task_submitted` notification.
+- The reward is not stored on the submission. An approval pays the task's reward at that moment, as described in [Approvals](#approvals).
+
+**Photos** go through the backend, not straight to storage, so the backend can check and clean every image:
+
+- JPEG, PNG or WebP, up to 10 MB, checked by reading the file, not by trusting its name or `Content-Type`. Anything else gives `422`.
+- The backend re-encodes the image as JPEG, at most 2048 px on the long side. That drops all metadata, including the GPS location phones add to photos, which matters for photos taken by kids at home.
+- Files go through a `PhotoStore` interface in `core/storage/`, chosen by a `photo_backend` setting, like email. A `local` backend writes to a folder for development; the production backend (Supabase Storage or any S3-compatible store) is added behind the same interface. The database keeps only the path.
+- `GET /households/{hid}/task-submissions/{submission_id}/photo` returns the image to a parent of the household, with the usual access checks, and `404` when the submission has no photo. The image is served by the backend instead of through a public or signed storage link, so the same household check covers it. The web app fetches it with the `Authorization` header and shows it from a blob URL.
+- Storage is outside the database, so deleting a submission, a kid or a household does not remove photos by itself. The services that delete them also delete the photos.
+- Photo uploads count towards a limit of 30 per kid per day. See [Rate limits](#rate-limits).
+
+#### Wallet
+
+- `GET /me/wallet` → `{balance, reserved, available}`, with the same meaning as on the parents' kid responses.
+- `GET /me/transactions` → the kid's credit log in this household, paginated, newest first, in the same shape as the parents' `/kids/{kid_id}/transactions`.
+- Kids cannot list the household's members, so each transaction in the response includes `created_by_name`: the display name of the user in `created_by`, read from `users` when the list is fetched. Nothing is stored on the transaction, so a renamed parent shows their current name, and a deleted parent shows `null`. The parents' list gets it too.
+
+#### Prizes and claims
+
+- `GET /me/prizes` → the household's prizes that are not archived, sorted by cost, then name. Not paginated: a store is browsed as a whole. Each is `{id, name, description, cost, pending_claim_id}`, where `pending_claim_id` is the kid's pending claim for that prize, or `null`.
+- `GET /me/prize-claims` → the kid's claims, filtered by `?status=` (default `pending`), paginated, newest first, in the same shape as the parents' claims.
+- `POST /me/prizes/{prize_id}/claims` with no body → `201` with the claim:
+
+```mermaid
+sequenceDiagram
+    actor Kid
+    participant API
+    participant DB
+
+    Kid->>API: POST /households/{hid}/me/prizes/{prize_id}/claims
+    API->>DB: BEGIN
+    API->>DB: lock the kid's household_members row (FOR UPDATE)
+    API->>DB: load prize WHERE id AND household_id = hid AND not archived
+    alt prize not found or archived
+        API->>DB: ROLLBACK
+        API-->>Kid: 404
+    else kid already has a pending claim for this prize
+        API->>DB: ROLLBACK
+        API-->>Kid: 409
+    else available < cost
+        API->>DB: ROLLBACK
+        API-->>Kid: 409 Not enough credits
+    else
+        API->>DB: insert prize_claims (pending, cost copied from the prize)
+        API->>DB: insert a notification for each parent
+        API->>DB: COMMIT
+        API-->>Kid: 201
+    end
+```
+
+- The claim reserves its cost until a parent reviews it, so the kid cannot spend the same credits twice. The lock is the same one approvals and adjustments take.
+- One pending claim per kid and prize. A second tap on "Get it" gives `409` instead of reserving the cost twice. A kid who wants two of a prize claims again after the first is reviewed.
+- Every parent of the household gets a `prize_claimed` notification.
+
 ### Health
 
 | Method | Path | Who | Status |
@@ -454,8 +559,8 @@ Returns `{"status": "ok"}` when the API can reach the database.
 
 ## Not covered yet
 
-- Kid endpoints: seeing tasks, submitting with a photo, claiming prizes, wallet and notifications.
-- Photo upload and signed links to view photos.
+- A kid cancelling a pending claim. It would need a `cancelled` review status.
+- Deleting photos some time after review. Today a photo is kept as long as its submission.
 - Changing a parent's own email address (it would reuse the `email_validation` code).
 - Adding an existing kid to a second household.
 - Transferring the admin role.
