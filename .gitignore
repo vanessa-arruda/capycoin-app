@@ -6,12 +6,11 @@ __pycache__/
 
 # Virtual environments
 venv/
+.venv/
 
 # Environment variables
 .env
 
-# Migrations
-alembic/
 
 # VSCode settings
 .vscode/

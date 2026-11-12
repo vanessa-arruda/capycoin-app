@@ -1,0 +1,10 @@
+# Only the app and its migrations go into the image.
+.venv
+**/__pycache__
+.pytest_cache
+.flake8
+.env
+tests
+test_db.py
+Containerfile
+.containerignore
