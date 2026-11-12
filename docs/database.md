@@ -236,7 +236,7 @@ WHERE p.household_id = :household_id AND pc.kid_id = :kid_id AND pc.status = 'pe
 -- available = balance - reserved
 ```
 
-A kid can have one pending claim per prize, so a double tap does not reserve the cost twice. A partial unique index on `prize_claims (prize_id, kid_id) WHERE status = 'pending'` will enforce it, like the one on submissions (planned with the kid endpoints).
+A kid can have one pending claim per prize, so a double tap does not reserve the cost twice. A partial unique index on `prize_claims (prize_id, kid_id) WHERE status = 'pending'` enforces it, like the one on submissions.
 
 To stop two requests from spending the same credits at the same time, any code that changes a kid's credits or reserved credits (claims, approvals, adjustments) must first lock the kid's membership row: `SELECT ... FROM household_members WHERE household_id = :h AND user_id = :kid FOR UPDATE`. `services.wallet.lock_kid` does this.
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, Text, func
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, Timestamps, UUIDPrimaryKey, enum_column
@@ -36,7 +36,17 @@ class Prize(UUIDPrimaryKey, Timestamps, Base):
 
 class PrizeClaim(UUIDPrimaryKey, Base):
     __tablename__ = "prize_claims"
-    __table_args__ = (CheckConstraint("cost > 0", name="cost_positive"),)
+    __table_args__ = (
+        CheckConstraint("cost > 0", name="cost_positive"),
+        # A second tap on "Get it" must not reserve the cost twice.
+        Index(
+            "uq_prize_claims_one_pending_per_prize",
+            "prize_id",
+            "kid_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
 
     prize_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("prizes.id", ondelete="CASCADE"), index=True

@@ -34,3 +34,12 @@ class PrizeResponse(BaseModel):
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class StorePrizeResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    cost: int
+    # The kid's pending claim for this prize.
+    pending_claim_id: uuid.UUID | None

@@ -91,6 +91,7 @@ def transaction_response(entry: CreditTransaction) -> TransactionResponse:
         prize_claim_id=entry.prize_claim_id,
         prize_name=claim.prize.name if claim else None,
         created_by=entry.created_by,
+        created_by_name=entry.creator.display_name if entry.creator else None,
         created_at=entry.created_at,
     )
 
@@ -109,6 +110,7 @@ def list_transactions(
                 TaskSubmission.task
             ),
             joinedload(CreditTransaction.prize_claim).joinedload(PrizeClaim.prize),
+            joinedload(CreditTransaction.creator),
         )
     )
     entries, next_before = paginate(db, query, CreditTransaction.id, page)

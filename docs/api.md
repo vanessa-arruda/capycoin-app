@@ -345,7 +345,7 @@ Without this check a parent could set an address they don't own, and its owner w
 - `GET /kids` lists the household's kids by name. `GET`, `PATCH` and `DELETE` on `/kids/{kid_id}` return `404` if the id is not a kid of this household.
 - `PATCH /kids/{kid_id}` `{display_name?, username?, password?, email?, code?}`. Omitted fields are unchanged. A new `email` needs a `code` from `POST /kids/email-code`. `"email": null` or `"username": null` removes it, as long as the kid can still log in (`422` otherwise). `null` for `display_name` or `password` gives `422`. Setting `password` revokes the kid's sessions.
 - `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). The account itself is deleted only if the kid belongs to no other household.
-- `GET /transactions` → paginated credit log for this household, newest first. Each entry is `{id, amount, kind, note, task_submission_id, task_title, prize_claim_id, prize_name, created_by, created_at}`; `kind` is `task_reward`, `prize_claim` or `manual_adjustment`.
+- `GET /transactions` → paginated credit log for this household, newest first. Each entry is `{id, amount, kind, note, task_submission_id, task_title, prize_claim_id, prize_name, created_by, created_by_name, created_at}`; `kind` is `task_reward`, `prize_claim` or `manual_adjustment`.
 - `POST /adjustments` `{amount, note}` → `201` with the new entry. `amount` is a non-zero integer from -1,000,000 to 1,000,000, positive to add and negative to remove credits. `note` (1 to 500 characters) tells the kid why. A balance may go negative. The kid gets a `credits_adjusted` notification.
 
 ### Tasks
@@ -458,11 +458,11 @@ Endpoints for a kid, about their own tasks, wallet and prizes in one household. 
 | GET | `/households/{hid}/me/tasks/{task_id}` | kid | implemented |
 | POST | `/households/{hid}/me/tasks/{task_id}/submissions` | kid | implemented, without `photo` |
 | GET | `/households/{hid}/task-submissions/{submission_id}/photo` | parent | planned |
-| GET | `/households/{hid}/me/wallet` | kid | planned |
-| GET | `/households/{hid}/me/transactions` | kid | planned |
-| GET | `/households/{hid}/me/prizes` | kid | planned |
-| POST | `/households/{hid}/me/prizes/{prize_id}/claims` | kid | planned |
-| GET | `/households/{hid}/me/prize-claims` | kid | planned |
+| GET | `/households/{hid}/me/wallet` | kid | implemented |
+| GET | `/households/{hid}/me/transactions` | kid | implemented |
+| GET | `/households/{hid}/me/prizes` | kid | implemented |
+| POST | `/households/{hid}/me/prizes/{prize_id}/claims` | kid | implemented |
+| GET | `/households/{hid}/me/prize-claims` | kid | implemented |
 
 #### Tasks
 

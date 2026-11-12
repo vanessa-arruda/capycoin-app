@@ -53,6 +53,7 @@ class TestAdjustments:
             "prize_claim_id": None,
             "prize_name": None,
             "created_by": str(mom.id),
+            "created_by_name": mom.display_name,
             "created_at": None,
         }
         kid = client.get(kid_url, headers=headers).json()

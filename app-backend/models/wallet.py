@@ -55,5 +55,6 @@ class CreditTransaction(UUIDPrimaryKey, CreatedAt, Base):
     note: Mapped[str | None] = mapped_column(Text)
 
     kid: Mapped[User] = relationship(foreign_keys=[kid_id])
+    creator: Mapped[User | None] = relationship(foreign_keys=[created_by])
     task_submission: Mapped[TaskSubmission | None] = relationship()
     prize_claim: Mapped[PrizeClaim | None] = relationship()

@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from core import clock
 from core.errors import Conflict, NotFound
-from models import HouseholdMember, Task, TaskAssignment, TaskSubmission, User
-from models.enums import NotificationType, Recurrence, ReviewStatus, UserRole
+from models import HouseholdMember, Task, TaskAssignment, TaskSubmission
+from models.enums import NotificationType, Recurrence, ReviewStatus
 from schemas.kid_task import KidSubmissionResponse, KidTaskResponse
 from services import notifications
 from services.tasks import TASK_NOT_FOUND
@@ -201,21 +201,11 @@ def submit(
         db.rollback()
         raise Conflict(ALREADY_SUBMITTED)
 
-    parent_ids = db.scalars(
-        select(HouseholdMember.user_id)
-        .join(User)
-        .where(
-            HouseholdMember.household_id == kid.household_id,
-            User.role == UserRole.PARENT,
-        )
-    ).all()
-    for parent_id in parent_ids:
-        notifications.notify(
-            db,
-            parent_id,
-            kid.household_id,
-            NotificationType.TASK_SUBMITTED,
-            task_submission_id=submission.id,
-        )
+    notifications.notify_parents(
+        db,
+        kid.household_id,
+        NotificationType.TASK_SUBMITTED,
+        task_submission_id=submission.id,
+    )
     db.commit()
     return submission

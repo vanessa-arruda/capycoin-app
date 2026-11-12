@@ -24,4 +24,12 @@ class TransactionResponse(BaseModel):
     prize_claim_id: uuid.UUID | None
     prize_name: str | None
     created_by: uuid.UUID | None
+    # Read from users when fetched, so it shows the current name.
+    created_by_name: str | None
     created_at: datetime
+
+
+class WalletResponse(BaseModel):
+    balance: int
+    reserved: int
+    available: int

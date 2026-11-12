@@ -98,6 +98,11 @@ ROUTES = {
     ("GET", "/households/{household_id}/me/tasks"): Access.KID,
     ("GET", "/households/{household_id}/me/tasks/{task_id}"): Access.KID,
     ("POST", "/households/{household_id}/me/tasks/{task_id}/submissions"): Access.KID,
+    ("GET", "/households/{household_id}/me/wallet"): Access.KID,
+    ("GET", "/households/{household_id}/me/transactions"): Access.KID,
+    ("GET", "/households/{household_id}/me/prizes"): Access.KID,
+    ("POST", "/households/{household_id}/me/prizes/{prize_id}/claims"): Access.KID,
+    ("GET", "/households/{household_id}/me/prize-claims"): Access.KID,
 }
 
 # Valid bodies for routes with record ids where {} is not enough, so requests

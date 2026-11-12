@@ -80,6 +80,25 @@ def notify(
     )
 
 
+def notify_parents(
+    db: Session,
+    household_id: uuid.UUID,
+    type: NotificationType,
+    **subject: uuid.UUID,
+) -> None:
+    """Notify every parent of the household. The caller commits."""
+    parent_ids = db.scalars(
+        select(HouseholdMember.user_id)
+        .join(User)
+        .where(
+            HouseholdMember.household_id == household_id,
+            User.role == UserRole.PARENT,
+        )
+    ).all()
+    for parent_id in parent_ids:
+        notify(db, parent_id, household_id, type, **subject)
+
+
 def _own_notifications(user: User):
     """The user's notifications from households they still belong to."""
     return (
