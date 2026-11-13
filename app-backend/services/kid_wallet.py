@@ -16,10 +16,19 @@ from services.prizes import PRIZE_NOT_FOUND
 
 
 def get_wallet(db: Session, kid: HouseholdMember) -> WalletResponse:
-    found = wallet.balances(db, kid.household_id, [kid.user_id])[kid.user_id]
+    found = _balance(db, kid)
     return WalletResponse(
-        balance=found.balance, reserved=found.reserved, available=found.available
+        balance=found.balance,
+        reserved=found.reserved,
+        available=found.available,
+        this_week=wallet.week_totals(
+            db, kid.household_id, kid.user_id, kid.household.timezone
+        ),
     )
+
+
+def _balance(db: Session, kid: HouseholdMember) -> wallet.Balance:
+    return wallet.balances(db, kid.household_id, [kid.user_id])[kid.user_id]
 
 
 def list_prizes(db: Session, kid: HouseholdMember) -> list[StorePrizeResponse]:
@@ -71,7 +80,7 @@ def claim_prize(db: Session, kid: HouseholdMember, prize_id: uuid.UUID) -> Prize
     if pending is not None:
         db.rollback()
         raise Conflict("You already asked for this prize")
-    if get_wallet(db, kid).available < prize.cost:
+    if _balance(db, kid).available < prize.cost:
         db.rollback()
         raise Conflict("Not enough credits")
 

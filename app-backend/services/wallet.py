@@ -1,10 +1,13 @@
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from core import clock
 from core.errors import InvalidInput
 from models import (
     CreditTransaction,
@@ -15,7 +18,7 @@ from models import (
 )
 from models.enums import CreditTransactionKind, NotificationType, ReviewStatus
 from schemas.common import Page, PageParams
-from schemas.wallet import TransactionResponse
+from schemas.wallet import TransactionResponse, WeekTotals
 from services import notifications
 from services.pagination import paginate
 
@@ -61,6 +64,32 @@ def balances(
         kid_id: Balance(totals.get(kid_id, 0), reserved.get(kid_id, 0))
         for kid_id in kid_ids
     }
+
+
+def week_totals(
+    db: Session, household_id: uuid.UUID, kid_id: uuid.UUID, timezone: str
+) -> WeekTotals:
+    """Coins earned and spent since Monday 00:00 in the household's timezone."""
+    zone = ZoneInfo(timezone)
+    today = clock.now().astimezone(zone).date()
+    monday = today - timedelta(days=today.weekday())
+    amount = CreditTransaction.amount
+    earned, spent = db.execute(
+        select(
+            func.coalesce(func.sum(amount).filter(amount > 0), 0),
+            func.coalesce(
+                -func.sum(amount).filter(
+                    CreditTransaction.kind == CreditTransactionKind.PRIZE_CLAIM
+                ),
+                0,
+            ),
+        ).where(
+            CreditTransaction.household_id == household_id,
+            CreditTransaction.kid_id == kid_id,
+            CreditTransaction.created_at >= datetime.combine(monday, time(), zone),
+        )
+    ).one()
+    return WeekTotals(start=monday, earned=earned, spent=spent)
 
 
 def lock_kid(db: Session, household_id: uuid.UUID, kid_id: uuid.UUID) -> None:

@@ -509,7 +509,7 @@ flowchart TD
 
 #### Wallet
 
-- `GET /me/wallet` → `{balance, reserved, available}`, with the same meaning as on the parents' kid responses.
+- `GET /me/wallet` → `{balance, reserved, available, this_week}`. The first three have the same meaning as on the parents' kid responses. `this_week` is `{start, earned, spent}` for the week so far: `start` is Monday in the household's timezone, `earned` adds up task rewards and coins added, and `spent` adds up prizes paid for. Coins removed by a parent count as neither, so the two numbers don't always explain a change in balance.
 - `GET /me/transactions` → the kid's credit log in this household, paginated, newest first, in the same shape as the parents' `/kids/{kid_id}/transactions`.
 - Kids cannot list the household's members, so each transaction in the response includes `created_by_name`: the display name of the user in `created_by`, read from `users` when the list is fetched. Nothing is stored on the transaction, so a renamed parent shows their current name, and a deleted parent shows `null`. The parents' list gets it too.
 

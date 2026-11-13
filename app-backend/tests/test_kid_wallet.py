@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -42,7 +44,7 @@ def url(household):
     return f"/households/{household.id}/me"
 
 
-def give(db, household, kid, amount, created_by=None):
+def give(db, household, kid, amount, created_by=None, **fields):
     db.add(
         CreditTransaction(
             household_id=household.id,
@@ -50,6 +52,7 @@ def give(db, household, kid, amount, created_by=None):
             amount=amount,
             kind=CreditTransactionKind.MANUAL_ADJUSTMENT,
             created_by=created_by.id if created_by else None,
+            **fields,
         )
     )
     db.commit()
@@ -65,9 +68,10 @@ def add_prize(db, household, name="Ice cream", cost=5, **fields):
 def test_wallet(client, db, url, headers, household, lia, mom):
     fill_wallet(db, household, lia, mom)
 
-    response = client.get(f"{url}/wallet", headers=headers)
+    body = client.get(f"{url}/wallet", headers=headers).json()
 
-    assert response.json() == {"balance": 9, "reserved": 5, "available": 4}
+    assert (body["balance"], body["reserved"], body["available"]) == (9, 5, 4)
+    assert (body["this_week"]["earned"], body["this_week"]["spent"]) == (13, 4)
 
 
 def test_transactions_are_the_kid_own_in_this_household(
@@ -139,7 +143,7 @@ def test_claim_reserves_the_cost_and_notifies_parents(
     assert body["cost"] == 5
     assert body["prize_name"] == "Ice cream"
     wallet = client.get(f"{url}/wallet", headers=headers).json()
-    assert wallet == {"balance": 5, "reserved": 5, "available": 0}
+    assert (wallet["balance"], wallet["reserved"], wallet["available"]) == (5, 5, 0)
     for parent in (mom, dad):
         assert (
             count(
@@ -244,3 +248,37 @@ def test_prize_claims_lists_the_kid_own_by_status(
 
     assert [c["cost"] for c in pending] == [5]
     assert [c["cost"] for c in approved] == [4]
+
+
+def test_this_week_starts_on_monday_in_the_household_timezone(
+    client, db, url, headers, household, lia, frozen_clock
+):
+    # Wednesday 11 November 2026. Monday 00:00 in Stockholm is Sunday 23:00 UTC.
+    frozen_clock.current = datetime(2026, 11, 11, 10, 0, tzinfo=UTC)
+    last_week = datetime(2026, 11, 8, 22, 30, tzinfo=UTC)
+    this_week = datetime(2026, 11, 8, 23, 30, tzinfo=UTC)
+    give(db, household, lia, 20, created_at=last_week)
+    give(db, household, lia, 7, created_at=this_week)
+    give(db, household, lia, -5, created_at=this_week)
+    prize = add_prize(db, household, cost=6)
+    claim = PrizeClaim(
+        prize_id=prize.id, kid_id=lia.id, cost=6, status=ReviewStatus.APPROVED
+    )
+    db.add(claim)
+    db.flush()
+    db.add(
+        CreditTransaction(
+            household_id=household.id,
+            kid_id=lia.id,
+            amount=-6,
+            kind=CreditTransactionKind.PRIZE_CLAIM,
+            prize_claim_id=claim.id,
+            created_at=this_week,
+        )
+    )
+    db.commit()
+
+    body = client.get(f"{url}/wallet", headers=headers).json()
+
+    assert body["this_week"] == {"start": "2026-11-09", "earned": 7, "spent": 6}
+    assert body["balance"] == 16

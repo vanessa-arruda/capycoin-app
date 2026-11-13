@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
@@ -29,7 +29,17 @@ class TransactionResponse(BaseModel):
     created_at: datetime
 
 
+class WeekTotals(BaseModel):
+    # Monday of this week in the household's timezone.
+    start: date
+    # Task rewards and coins added.
+    earned: int
+    # Prizes paid for. Coins removed by a parent count as neither.
+    spent: int
+
+
 class WalletResponse(BaseModel):
     balance: int
     reserved: int
     available: int
+    this_week: WeekTotals
