@@ -211,6 +211,7 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 
 - **CORS:** only the origins in the `cors_origins` setting (default `["http://localhost:5173"]`) can call the API from a browser. The token goes in the `Authorization` header; the API sets no cookies, so credentials mode is off.
 - **Headers on every response:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` (applied by browsers over HTTPS only), `Cache-Control: no-store` (responses hold personal data), and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The interactive docs at `/docs` and `/redoc` get no CSP, because they load scripts.
+- **Request size:** request bodies over 5 MB get `413` with `The request must be 5 MB or less`. Uvicorn has no limit of its own, and FastAPI reads a whole body before it checks access, so without this anyone could send huge uploads. A `Content-Length` over the limit is rejected before anything is read; a body sent without one (chunked) is cut off once it passes 5 MB. The web app should shrink photos before uploading them (2048 px on the long side is what the backend keeps), since full-size photos from recent phones can be over 5 MB.
 - **No secrets in responses:** a test walks every response schema in the OpenAPI spec and fails if a field is named `password`, `password_hash`, `token_hash`, `code_hash` or `code`.
 
 ## Endpoints
@@ -499,7 +500,7 @@ flowchart TD
 
 **Photos** go through the backend, not straight to storage, so the backend can check and clean every image:
 
-- JPEG, PNG or WebP, up to 10 MB, checked by reading the file, not by trusting its name or `Content-Type`. Anything else gives `422`.
+- JPEG, PNG or WebP, up to 5 MB, checked by reading the file, not by trusting its name or `Content-Type`. Anything else gives `422`.
 - The backend re-encodes the image as JPEG, at most 2048 px on the long side. That drops all metadata, including the GPS location phones add to photos, which matters for photos taken by kids at home.
 - Files go through a `PhotoStore` interface in `core/storage/`, chosen by a `photo_backend` setting, like email. A `local` backend writes to the folder in the `photo_dir` setting (default `.photos/` at the repo root) for development; the production backend (Supabase Storage or any S3-compatible store) is added behind the same interface. The database keeps only the path.
 - `GET /households/{hid}/task-submissions/{submission_id}/photo` returns the image to a parent of the household, with the usual access checks, and `404` when the submission has no photo. The image is served by the backend instead of through a public or signed storage link, so the same household check covers it. The web app fetches it with the `Authorization` header and shows it from a blob URL.
@@ -566,4 +567,3 @@ Returns `{"status": "ok"}` when the API can reach the database.
 - Transferring the admin role.
 - Email delivery through a real provider.
 - A production photo backend. Only `local` exists, and it is not meant for the container image.
-- A request size limit. The app reads a whole upload before it checks access, so the reverse proxy in front of it should reject bodies over about 11 MB.

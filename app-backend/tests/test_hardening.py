@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import select
 
+from api.middleware import MAX_REQUEST_BYTES, TOO_LARGE
 from main import app
 from models import RateLimitEvent
 
@@ -168,3 +169,40 @@ def test_no_response_includes_secrets():
 
     assert names, "found no response fields; the schema walk is broken"
     assert names & SECRET_FIELDS == set()
+
+
+class TestRequestSize:
+    def test_rejects_a_large_content_length_before_reading(self, client):
+        response = client.post(
+            "/auth/login",
+            content=b"x" * (MAX_REQUEST_BYTES + 1),
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 413
+        assert response.json()["detail"] == TOO_LARGE
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_rejects_a_large_body_sent_without_a_length(self, client):
+        def chunks():
+            for _ in range(6):
+                yield b"x" * (1024 * 1024)
+
+        response = client.post(
+            "/auth/login",
+            content=chunks(),
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert "content-length" not in response.request.headers
+        assert response.status_code == 413
+        assert response.json()["detail"] == TOO_LARGE
+
+    def test_allows_a_body_at_the_limit(self, client):
+        response = client.post(
+            "/auth/login",
+            content=b" " * (MAX_REQUEST_BYTES - 2) + b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 422

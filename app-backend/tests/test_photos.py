@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 from PIL import ExifTags, Image
 
+from api import middleware
 from core.errors import InvalidInput
 from core.storage.local import LocalPhotoStore
 from models import Task, TaskAssignment, TaskSubmission
@@ -71,7 +72,7 @@ class TestClean:
             photos.clean(image_bytes((8000, 8000), format="PNG", mode="1"))
 
     def test_read_upload_rejects_large_files(self):
-        with pytest.raises(InvalidInput, match="10 MB"):
+        with pytest.raises(InvalidInput, match="5 MB"):
             photos.read_upload(io.BytesIO(b"x" * (photos.MAX_BYTES + 1)))
 
 
@@ -168,11 +169,12 @@ def test_submit_with_a_file_that_is_not_an_image(db, submit, photo_store, task):
     assert photo_store.files == {}
 
 
-def test_submit_with_a_file_that_is_too_large(submit):
+def test_submit_with_a_file_that_is_too_large(db, submit, task):
     response = submit(b"x" * (photos.MAX_BYTES + 1))
 
-    assert response.status_code == 422
-    assert response.json()["detail"] == photos.TOO_LARGE
+    assert response.status_code == 413
+    assert response.json()["detail"] == middleware.TOO_LARGE
+    assert count(db, TaskSubmission, task_id=task.id) == 0
 
 
 def test_photo_uploads_are_limited_per_kid(db, submit, lia):

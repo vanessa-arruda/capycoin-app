@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.middleware import security_headers
+from api.middleware import LimitRequestSize, security_headers
 from api.routers import (
     approvals,
     auth,
@@ -27,6 +27,8 @@ app = FastAPI(
     version="0.1.0",
 )
 app.add_exception_handler(AppError, handle_app_error)
+# Added first so it runs innermost: its 413 still gets CORS and security headers.
+app.add_middleware(LimitRequestSize)
 app.middleware("http")(security_headers)
 app.add_middleware(
     CORSMiddleware,

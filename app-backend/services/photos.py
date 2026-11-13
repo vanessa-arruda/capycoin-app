@@ -8,14 +8,14 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from core.errors import InvalidInput
 
-MAX_BYTES = 10 * 1024 * 1024
+MAX_BYTES = 5 * 1024 * 1024
 MAX_SIDE = 2048
 # Larger images take too much memory to decode.
 MAX_PIXELS = 60_000_000
 FORMATS = ["JPEG", "PNG", "WEBP"]
 
 NOT_AN_IMAGE = "The photo must be a JPEG, PNG or WebP image"
-TOO_LARGE = "The photo must be 10 MB or less"
+TOO_LARGE = "The photo must be 5 MB or less"
 
 
 def read_upload(file: BinaryIO) -> bytes:
