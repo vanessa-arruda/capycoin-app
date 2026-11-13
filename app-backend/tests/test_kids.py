@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from models import (
     CreditTransaction,
@@ -204,7 +205,7 @@ class TestViewKids:
     ):
         lia = make_kid(household)
         dad = make_user(email="dad@example.com")
-        fill_wallet(db, make_household(dad, lia, name="Dad's"), lia, dad)
+        fill_wallet(db, make_household(dad, name="Dad's"), lia, dad)
 
         body = client.get(
             f"/households/{household.id}/kids/{lia.id}", headers=headers
@@ -288,19 +289,33 @@ class TestRemoveKid:
         assert count(db, Notification, recipient_id=mom.id) == 1
         assert count(db, Task) == 2
 
-    def test_keeps_the_account_and_other_household(
-        self, client, db, household, headers, mom, make_kid, make_user, make_household
+
+class TestOneHouseholdPerKid:
+    def test_a_kid_cannot_join_a_second_household(
+        self, db, household, make_kid, make_user, make_household
     ):
         lia = make_kid(household)
-        dad = make_user(email="dad@example.com")
-        dads = make_household(dad, lia, name="Dad's")
-        fill_wallet(db, household, lia, mom)
-        fill_wallet(db, dads, lia, dad)
+        dads = make_household(make_user(email="dad@example.com"), name="Dad's")
 
-        client.delete(f"/households/{household.id}/kids/{lia.id}", headers=headers)
+        db.add(HouseholdMember(household_id=dads.id, user_id=lia.id))
+        with pytest.raises(IntegrityError, match="only one household"):
+            db.flush()
 
-        db.expire_all()
-        assert db.get(User, lia.id) is not None
-        assert count(db, HouseholdMember, user_id=lia.id) == 1
-        assert count(db, CreditTransaction, kid_id=lia.id) == 3
-        assert count(db, CreditTransaction, household_id=household.id) == 0
+    def test_a_kid_cannot_be_moved_into_another_household(
+        self, db, household, make_kid, make_user, make_household
+    ):
+        lia = make_kid(household)
+        dads = make_household(make_user(email="dad@example.com"), name="Dad's")
+        theo = make_kid(dads, username="theo", display_name="Theo")
+        membership = db.get(HouseholdMember, (dads.id, theo.id))
+
+        membership.user_id = lia.id
+        with pytest.raises(IntegrityError, match="only one household"):
+            db.flush()
+
+    def test_a_parent_can_join_several_households(
+        self, db, mom, household, make_user, make_household
+    ):
+        make_household(make_user(email="dad@example.com"), mom, name="Dad's")
+
+        assert count(db, HouseholdMember, user_id=mom.id) == 2

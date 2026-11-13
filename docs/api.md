@@ -345,7 +345,7 @@ Without this check a parent could set an address they don't own, and its owner w
 - Kid responses are `{id, display_name, username, email, balance, reserved, available}`. `balance` is the sum of the kid's credits in this household, `reserved` the cost of their pending prize claims, and `available` is `balance - reserved`.
 - `GET /kids` lists the household's kids by name. `GET`, `PATCH` and `DELETE` on `/kids/{kid_id}` return `404` if the id is not a kid of this household.
 - `PATCH /kids/{kid_id}` `{display_name?, username?, password?, email?, code?}`. Omitted fields are unchanged. A new `email` needs a `code` from `POST /kids/email-code`. `"email": null` or `"username": null` removes it, as long as the kid can still log in (`422` otherwise). `null` for `display_name` or `password` gives `422`. Setting `password` revokes the kid's sessions.
-- `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). The account itself is deleted only if the kid belongs to no other household.
+- `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). A kid belongs to one household, so the account is deleted too.
 - `GET /transactions` → paginated credit log for this household, newest first. Each entry is `{id, amount, kind, note, task_submission_id, task_title, prize_claim_id, prize_name, created_by, created_by_name, created_at}`; `kind` is `task_reward`, `prize_claim` or `manual_adjustment`.
 - `POST /adjustments` `{amount, note}` → `201` with the new entry. `amount` is a non-zero integer from -1,000,000 to 1,000,000, positive to add and negative to remove credits. `note` (1 to 500 characters) tells the kid why. A balance may go negative. The kid gets a `credits_adjusted` notification.
 
@@ -451,7 +451,7 @@ Parents get `task_submitted` and `prize_claimed`. Kids get `task_approved`, `tas
 
 ### Kid app
 
-Endpoints for a kid, about their own tasks, wallet and prizes in one household. A kid in several households calls them once per household (from `GET /me/households`). Parents get `403` on all of them.
+Endpoints for a kid, about their own tasks, wallet and prizes in one household. A kid belongs to one household, which the app finds with `GET /me/households`. Parents get `403` on all of them.
 
 | Method | Path | Who | Status |
 |---|---|---|---|
@@ -563,7 +563,7 @@ Returns `{"status": "ok"}` when the API can reach the database.
 - A kid cancelling a pending claim. It would need a `cancelled` review status.
 - Deleting photos some time after review. Today a photo is kept as long as its submission.
 - Changing a parent's own email address (it would reuse the `email_validation` code).
-- Adding an existing kid to a second household.
+- Kids in more than one household. The database rejects a second household for a kid (see `docs/database.md`).
 - Transferring the admin role.
 - Email delivery through a real provider.
 - A production photo backend. Only `local` exists, and it is not meant for the container image.

@@ -123,7 +123,7 @@ class TestTransactions:
         self, client, db, household, kid_url, headers, lia, make_user, make_household
     ):
         dad = make_user(email="dad@example.com")
-        fill_wallet(db, make_household(dad, lia, name="Dad's"), lia, dad)
+        fill_wallet(db, make_household(dad, name="Dad's"), lia, dad)
 
         body = client.get(f"{kid_url}/transactions", headers=headers).json()
 

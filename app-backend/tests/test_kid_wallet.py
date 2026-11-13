@@ -79,7 +79,7 @@ def test_transactions_are_the_kid_own_in_this_household(
 ):
     give(db, household, lia, 3)
     give(db, household, theo, 7)
-    other = make_household(mom, lia, name="Grandma's")
+    other = make_household(mom, name="Grandma's")
     give(db, other, lia, 11)
 
     response = client.get(f"{url}/transactions", headers=headers)

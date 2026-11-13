@@ -209,7 +209,7 @@ Parents and kids log in the same ways, receive notifications and have settings. 
 
 ### Membership is its own table
 
-A user can be part of several households (for example, a kid with separated parents). `household_members` links users and households. The admin is a flag on the membership, and a partial unique index allows only one admin per household. The role stays on `users` because a person is a parent or a kid in every household they belong to.
+A parent can be part of several households. `household_members` links users and households. A kid belongs to one household for now: a trigger on `household_members` (`one_household_per_kid`) rejects a second membership for a kid. The role lives on `users`, so a unique index cannot express this. The table itself allows many, so kids with two homes (for example, with separated parents) can be supported later by dropping the trigger. The admin is a flag on the membership, and a partial unique index allows only one admin per household. The role stays on `users` because a person is a parent or a kid in every household they belong to.
 
 ### The wallet is an append-only log, one per kid per household
 
@@ -346,5 +346,5 @@ DROP TYPE IF EXISTS activitystatus;
 
 ## Not covered yet
 
-- Adding an existing kid without an email to a second household. Invitations work by email only.
+- Kids in more than one household. The trigger above blocks it, and the kid app has no household switcher.
 - Push notifications for the installable web app. `notification_preferences.channel` can get a new value when that is added.
