@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -7,14 +7,16 @@ from sqlalchemy.orm import Session, selectinload
 
 from core import clock
 from core.errors import Conflict, InvalidInput, NotFound
-from models import HouseholdMember, Task, TaskAssignment
+from models import Household, HouseholdMember, Task, TaskAssignment
 from schemas.common import Page, PageParams
 from schemas.task import TaskCreate, TaskResponse, TaskUpdate
 from services import kids
 from services.pagination import paginate
 
 TASK_NOT_FOUND = "Task not found"
-# Fields that can't be removed; description and due_at can be set to null.
+# Tasks end at the last minute of their due day for now.
+DUE_TIME = time(23, 59)
+# Fields that can't be removed; description and due_on can be set to null.
 REQUIRED_FIELDS = ("title", "reward", "recurrence", "starts_on", "kid_ids")
 
 
@@ -67,16 +69,25 @@ def get_task(db: Session, household_id: uuid.UUID, task_id: uuid.UUID) -> Task:
     return task
 
 
-def _check_due_at(starts_on: date, due_at: datetime | None, timezone: str) -> None:
-    if due_at is not None and due_at.astimezone(ZoneInfo(timezone)).date() < starts_on:
-        raise InvalidInput("due_at must not be before starts_on")
+def _due_at(due_on: date | None, starts_on: date, timezone: str) -> datetime | None:
+    if due_on is None:
+        return None
+    if due_on < starts_on:
+        raise InvalidInput("due_on must not be before starts_on")
+    return datetime.combine(due_on, DUE_TIME, ZoneInfo(timezone))
+
+
+def _due_on(task: Task, household: Household) -> date | None:
+    if task.due_at is None:
+        return None
+    return task.due_at.astimezone(ZoneInfo(household.timezone)).date()
 
 
 def create_task(db: Session, parent: HouseholdMember, data: TaskCreate) -> Task:
     household = parent.household
     kid_ids = list(dict.fromkeys(data.kid_ids))
     kids.check_kid_ids(db, household.id, kid_ids)
-    _check_due_at(data.starts_on, data.due_at, household.timezone)
+    due_at = _due_at(data.due_on, data.starts_on, household.timezone)
 
     task = Task(
         household_id=household.id,
@@ -86,7 +97,7 @@ def create_task(db: Session, parent: HouseholdMember, data: TaskCreate) -> Task:
         reward=data.reward,
         recurrence=data.recurrence,
         starts_on=data.starts_on,
-        due_at=data.due_at,
+        due_at=due_at,
         assignments=[TaskAssignment(kid_id=kid_id) for kid_id in kid_ids],
     )
     db.add(task)
@@ -107,11 +118,12 @@ def update_task(
             raise InvalidInput(f"{field} cannot be empty")
     # Check everything before changing the task, so a 422 leaves it untouched.
     values = changes.model_dump(include=fields - {"kid_ids"})
-    _check_due_at(
-        values.get("starts_on", task.starts_on),
-        values.get("due_at", task.due_at),
-        household.timezone,
+    due_on = values.pop("due_on") if "due_on" in values else _due_on(task, household)
+    due_at = _due_at(
+        due_on, values.get("starts_on", task.starts_on), household.timezone
     )
+    if "due_on" in fields:
+        values["due_at"] = due_at
     if "kid_ids" in fields:
         kid_ids = list(dict.fromkeys(changes.kid_ids))
         kids.check_kid_ids(db, household.id, kid_ids)

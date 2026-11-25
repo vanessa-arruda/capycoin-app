@@ -359,13 +359,13 @@ Without this check a parent could set an address they don't own, and its owner w
 | PATCH | `/households/{hid}/tasks/{task_id}` | parent | implemented |
 | DELETE | `/households/{hid}/tasks/{task_id}` | parent | implemented |
 
-- `POST` `{title, description?, reward, recurrence?, starts_on, due_at?, kid_ids}` → `201`.
+- `POST` `{title, description?, reward, recurrence?, starts_on, due_on?, kid_ids}` → `201`.
   - `reward` is 1 to 1,000,000. `recurrence` is `none` (default), `daily`, `weekly` or `monthly`.
-  - `starts_on` is a calendar day in the household's timezone. For one-off tasks `due_at` is the deadline; for recurring tasks it is when they stop repeating. `due_at` must not fall on a day before `starts_on`, counted in the household's timezone.
+  - `starts_on` and `due_on` are calendar days in the household's timezone. `due_on` is the last day: for one-off tasks the deadline, for recurring tasks when they stop repeating. It must not be before `starts_on`. For now the task always ends at 23:59 on that day, in the household's timezone; responses show that moment as `due_at`.
   - `kid_ids` has 1 to 50 ids, duplicates ignored. Every id must be a kid of this household (`422` otherwise).
 - Task responses are `{id, title, description, reward, recurrence, starts_on, due_at, archived_at, kid_ids, created_by, created_at, updated_at}`.
 - `GET` list is paginated, newest first. Filters: `?kid_id=`, `?archived=true|false` (default `false`).
-- `PATCH` takes the same fields, all optional. `null` clears `description` or `due_at`; for the other fields it gives `422`. `kid_ids` replaces the assignment list. A new `reward` applies to submissions approved after the change. Archived tasks cannot be changed (`409`).
+- `PATCH` takes the same fields, all optional. `null` clears `description` or `due_on`; for the other fields it gives `422`. `kid_ids` replaces the assignment list. A new `reward` applies to submissions approved after the change. Archived tasks cannot be changed (`409`).
 - `DELETE` archives the task (`204`, also when it is already archived). Archived tasks are hidden from kids; their pending submissions can still be reviewed.
 
 ### Prizes

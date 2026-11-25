@@ -58,14 +58,15 @@ class TestCreateTask:
             headers,
             [lia.id, theo.id, lia.id],
             recurrence="weekly",
-            due_at="2026-12-31T20:00:00+01:00",
+            due_on="2026-12-31",
         )
 
         assert response.status_code == 201
         body = response.json()
         assert body["kid_ids"] == sorted([str(lia.id), str(theo.id)])
         assert body["recurrence"] == "weekly"
-        assert body["due_at"] == "2026-12-31T19:00:00Z"
+        # 23:59 in Stockholm, UTC+1 in winter.
+        assert body["due_at"] == "2026-12-31T22:59:00Z"
         assert body["created_by"] == str(mom.id)
         assert body["archived_at"] is None
 
@@ -91,22 +92,27 @@ class TestCreateTask:
     def test_needs_at_least_one_kid(self, client, tasks_url, headers):
         assert create(client, tasks_url, headers, []).status_code == 422
 
-    def test_due_at_needs_a_timezone(self, client, tasks_url, headers, kids):
-        response = create(
-            client, tasks_url, headers, [kids[0].id], due_at="2026-12-31T20:00:00"
-        )
-
-        assert response.status_code == 422
-
-    def test_due_at_is_compared_in_the_household_timezone(
+    def test_due_on_ends_at_23_59_in_the_household_timezone(
         self, client, tasks_url, headers, kids
     ):
-        # 23:30 UTC on 9 November is 00:30 on 10 November in Stockholm.
-        same_day = create(
-            client, tasks_url, headers, [kids[0].id], due_at="2026-11-09T23:30:00Z"
+        # Summer time: Stockholm is UTC+2.
+        response = create(
+            client,
+            tasks_url,
+            headers,
+            [kids[0].id],
+            starts_on="2026-07-01",
+            due_on="2026-07-01",
         )
+
+        assert response.json()["due_at"] == "2026-07-01T21:59:00Z"
+
+    def test_due_on_can_be_the_start_day_but_not_before(
+        self, client, tasks_url, headers, kids
+    ):
+        same_day = create(client, tasks_url, headers, [kids[0].id], due_on="2026-11-10")
         day_before = create(
-            client, tasks_url, headers, [kids[0].id], due_at="2026-11-09T22:30:00Z"
+            client, tasks_url, headers, [kids[0].id], due_on="2026-11-09"
         )
 
         assert same_day.status_code == 201
@@ -209,11 +215,36 @@ class TestUpdateTask:
         response = client.patch(
             url,
             headers=headers,
-            json={"title": "Changed", "due_at": "2026-11-01T12:00:00Z"},
+            json={"title": "Changed", "due_on": "2026-11-01"},
         )
 
         assert response.status_code == 422
         assert client.get(url, headers=headers).json()["title"] == "Dishes"
+
+    def test_sets_and_clears_due_on(self, client, tasks_url, headers, kids):
+        task = create(client, tasks_url, headers, [kids[0].id]).json()
+        url = f"{tasks_url}/{task['id']}"
+
+        set_ = client.patch(url, headers=headers, json={"due_on": "2026-11-20"})
+        cleared = client.patch(url, headers=headers, json={"due_on": None})
+
+        assert set_.json()["due_at"] == "2026-11-20T22:59:00Z"
+        assert cleared.json()["due_at"] is None
+
+    def test_starts_on_cannot_move_past_the_due_day(
+        self, client, tasks_url, headers, kids
+    ):
+        task = create(
+            client, tasks_url, headers, [kids[0].id], due_on="2026-11-20"
+        ).json()
+
+        response = client.patch(
+            f"{tasks_url}/{task['id']}",
+            headers=headers,
+            json={"starts_on": "2026-11-21"},
+        )
+
+        assert response.status_code == 422
 
     def test_archived_task_cannot_be_changed(self, client, tasks_url, headers, kids):
         task = create(client, tasks_url, headers, [kids[0].id]).json()

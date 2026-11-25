@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from models.enums import Recurrence
 
@@ -20,7 +20,8 @@ class TaskCreate(BaseModel):
     reward: Reward
     recurrence: Recurrence = Recurrence.NONE
     starts_on: date
-    due_at: AwareDatetime | None = None
+    # The last day; the task ends at 23:59 in the household's timezone.
+    due_on: date | None = None
     kid_ids: KidIds
 
 
@@ -30,7 +31,8 @@ class TaskUpdate(BaseModel):
     reward: Reward | None = None
     recurrence: Recurrence | None = None
     starts_on: date | None = None
-    due_at: AwareDatetime | None = None
+    # The last day; the task ends at 23:59 in the household's timezone.
+    due_on: date | None = None
     kid_ids: KidIds | None = None
 
 
