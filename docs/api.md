@@ -209,7 +209,7 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 
 ### Browser access and response headers
 
-- **CORS:** only the origins in the `cors_origins` setting (default `["http://localhost:5173"]`) can call the API from a browser. The token goes in the `Authorization` header; the API sets no cookies, so credentials mode is off.
+- **CORS:** only the origins in the `cors_origins` setting (default `["http://localhost:8081"]`) can call the API from a browser. The token goes in the `Authorization` header; the API sets no cookies, so credentials mode is off.
 - **Headers on every response:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Strict-Transport-Security` (applied by browsers over HTTPS only), `Cache-Control: no-store` (responses hold personal data), and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The interactive docs at `/docs` and `/redoc` get no CSP, because they load scripts.
 - **Request size:** request bodies over 5 MB get `413` with `The request must be 5 MB or less`. Uvicorn has no limit of its own, and FastAPI reads a whole body before it checks access, so without this anyone could send huge uploads. A `Content-Length` over the limit is rejected before anything is read; a body sent without one (chunked) is cut off once it passes 5 MB. The web app should shrink photos before uploading them (2048 px on the long side is what the backend keeps), since full-size photos from recent phones can be over 5 MB.
 - **No secrets in responses:** a test walks every response schema in the OpenAPI spec and fails if a field is named `password`, `password_hash`, `token_hash`, `code_hash` or `code`.
@@ -299,7 +299,7 @@ sequenceDiagram
 ```
 
 - `POST` `{email}` → `201 {id, email, status, expires_at, created_at}`. `409` if that email already has an open invitation or belongs to a member. An expired invitation for the same email is revoked and replaced.
-- The email links to `{app_url}/invitations/accept#token=<token>`. `app_url` is a setting (default `http://localhost:5173`). The token is in the URL fragment, which browsers do not send to servers, so it stays out of server and proxy logs. The web app reads it and calls `POST /invitations/accept`.
+- The email links to `{app_url}/invitations/accept#token=<token>`. `app_url` is a setting (default `http://localhost:8081`). The token is in the URL fragment, which browsers do not send to servers, so it stays out of server and proxy logs. The web app reads it and calls `POST /invitations/accept`.
 - `GET` lists open invitations: pending and not expired, newest first. `DELETE` revokes a pending one (`204`); `404` if it is not pending.
 - `POST /invitations/accept` `{token}` → `200 {id, name, timezone}` of the household. `409` if the caller is already a member. Kid accounts get `403`.
 - Only the user whose email matches the invitation can accept it. Parents' emails are always verified, because parents sign up with a one-time code.

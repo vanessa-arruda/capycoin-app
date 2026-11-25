@@ -122,10 +122,10 @@ class TestHeaders:
                 },
             )
 
-        allowed = preflight("http://localhost:5173")
+        allowed = preflight("http://localhost:8081")
         other = preflight("https://evil.example")
 
-        assert allowed.headers["Access-Control-Allow-Origin"] == "http://localhost:5173"
+        assert allowed.headers["Access-Control-Allow-Origin"] == "http://localhost:8081"
         assert "Access-Control-Allow-Origin" not in other.headers
 
 

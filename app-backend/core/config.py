@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     # Folder for the local photo backend.
     photo_dir: Path = REPO_ROOT / ".photos"
     # Web app address, used for links in emails.
-    app_url: str = "http://localhost:5173"
+    app_url: str = "http://localhost:8081"
     # Browser origins allowed to call the API (CORS). JSON list in .env.
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:8081"]
 
     @property
     def database_url(self) -> URL:
