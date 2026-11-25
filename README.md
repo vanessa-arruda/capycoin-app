@@ -61,3 +61,8 @@ podman run -d -p 8000:8000 --env-file .env capycoin-be
 - 4 - Set up  basic models (Parent, Child, Activity);
 - 5 - Set up  basic API routers (like /parent, /child);
 - 6 - Make simple Pydantic schemas (for request/response)
+
+## Plans
+
+- [Frontend plan](docs/frontend-plan.md): the web, Android and iOS app.
+- [Backend plan](docs/backend-plan.md): backend work and manual setup still to do.
