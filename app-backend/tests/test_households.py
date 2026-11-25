@@ -1,6 +1,8 @@
+from datetime import date
+
 from sqlalchemy import select
 
-from models import Household, HouseholdMember
+from models import Household, HouseholdMember, Task, TaskSubmission, User
 from models.enums import UserRole
 
 
@@ -140,3 +142,36 @@ class TestDeleteHousehold:
             client.get(f"/households/{household_id}", headers=headers).status_code
             == 404
         )
+
+    def test_deletes_the_kids_accounts_and_photos(
+        self, client, make_user, make_household, make_kid, auth_headers, db, photo_store
+    ):
+        admin = make_user(email="mom@example.com")
+        dad = make_user(email="dad@example.com")
+        household = make_household(admin, dad)
+        lia = make_kid(household)
+        task = Task(
+            household_id=household.id, title="Dishes", reward=5, starts_on=date.today()
+        )
+        db.add(task)
+        db.flush()
+        photo = f"{household.id}/dishes.jpg"
+        photo_store.save(photo, b"photo")
+        db.add(
+            TaskSubmission(
+                task_id=task.id,
+                kid_id=lia.id,
+                period_start=task.starts_on,
+                photo_path=photo,
+            )
+        )
+        db.commit()
+        lia_id, dad_id = lia.id, dad.id
+
+        response = delete(client, household.id, auth_headers(admin), "Home")
+
+        assert response.status_code == 204
+        db.expire_all()
+        assert db.get(User, lia_id) is None
+        assert db.get(User, dad_id) is not None
+        assert photo_store.files == {}

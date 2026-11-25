@@ -1,9 +1,12 @@
-from sqlalchemy import delete, select
+import uuid
+
+from sqlalchemy import delete, exists, select
 from sqlalchemy.orm import Session
 
 from core.errors import InvalidInput
 from core.storage import PhotoStore
 from models import Household, HouseholdMember, Task, TaskSubmission, User
+from models.enums import UserRole
 from schemas.household import HouseholdCreate, HouseholdUpdate, MyHouseholdResponse
 
 
@@ -50,14 +53,34 @@ def delete_household(
 ) -> None:
     if confirm_name != household.name:
         raise InvalidInput("confirm_name does not match the household name")
+    photo_paths = delete_household_rows(db, household.id)
+    db.commit()
+    store.delete(photo_paths)
+
+
+def delete_household_rows(db: Session, household_id: uuid.UUID) -> list[str]:
+    """Delete a household, everything in it and its kids' accounts, without committing.
+
+    Returns the photo paths to delete from storage after the commit.
+    """
     photo_paths = db.scalars(
         select(TaskSubmission.photo_path)
         .join(Task)
         .where(
-            Task.household_id == household.id, TaskSubmission.photo_path.is_not(None)
+            Task.household_id == household_id, TaskSubmission.photo_path.is_not(None)
         )
     ).all()
+    kid_ids = db.scalars(
+        select(User.id)
+        .join(HouseholdMember)
+        .where(HouseholdMember.household_id == household_id, User.role == UserRole.KID)
+    ).all()
     # The database deletes everything in the household (ON DELETE CASCADE).
-    db.execute(delete(Household).where(Household.id == household.id))
-    db.commit()
-    store.delete(photo_paths)
+    db.execute(delete(Household).where(Household.id == household_id))
+    # A kid belongs to one household, so their account goes with it.
+    db.execute(
+        delete(User).where(
+            User.id.in_(kid_ids), ~exists().where(HouseholdMember.user_id == User.id)
+        )
+    )
+    return list(photo_paths)

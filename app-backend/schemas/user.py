@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from models.enums import UserRole
 
@@ -25,3 +25,9 @@ class UserUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str | None = None
     new_password: Password
+
+
+class AccountDelete(BaseModel):
+    # Names of the households deleted with the account: those where the user is
+    # the admin and the only member.
+    confirm_household_names: list[str] = Field(default=[], max_length=50)

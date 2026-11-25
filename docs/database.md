@@ -14,7 +14,7 @@ This document explains how Capycoin stores its data and why it was designed this
 - Parents can add or remove credits by hand. A balance can go negative.
 - Credits for pending prize claims are reserved, so a kid cannot spend the same credits twice.
 - Parents and kids get notifications and can choose which ones they receive.
-- Deleting a household deletes everything in it.
+- Deleting a household deletes everything in it, and its kids' accounts.
 
 ## Overview
 

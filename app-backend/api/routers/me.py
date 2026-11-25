@@ -1,9 +1,12 @@
-from fastapi import APIRouter, status
+from typing import Annotated
 
-from api.deps import CurrentSession, CurrentUser, Db
+from fastapi import APIRouter, Depends, status
+
+from api.deps import CurrentSession, CurrentUser, Db, ParentUser
+from core.storage import PhotoStore, get_photo_store
 from schemas.household import MyHouseholdResponse
 from schemas.notification import Preference, PreferencesUpdate
-from schemas.user import PasswordChange, UserResponse, UserUpdate
+from schemas.user import AccountDelete, PasswordChange, UserResponse, UserUpdate
 from services import auth, households, notifications, users
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -17,6 +20,17 @@ def get_me(user: CurrentUser) -> UserResponse:
 @router.patch("")
 def update_me(changes: UserUpdate, user: CurrentUser, db: Db) -> UserResponse:
     return UserResponse.model_validate(users.update_user(db, user, changes))
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+def delete_me(
+    user: ParentUser,
+    db: Db,
+    store: Annotated[PhotoStore, Depends(get_photo_store)],
+    payload: AccountDelete | None = None,
+) -> None:
+    confirmed = payload.confirm_household_names if payload else []
+    users.delete_account(db, user, confirmed, store)
 
 
 @router.put("/password", status_code=status.HTTP_204_NO_CONTENT)

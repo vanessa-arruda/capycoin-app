@@ -39,6 +39,7 @@ ROUTES = {
     ("POST", "/auth/logout"): Access.LOGGED_IN,
     ("GET", "/me"): Access.LOGGED_IN,
     ("PATCH", "/me"): Access.LOGGED_IN,
+    ("DELETE", "/me"): Access.PARENT_ACCOUNT,
     ("PUT", "/me/password"): Access.LOGGED_IN,
     ("GET", "/me/households"): Access.LOGGED_IN,
     ("GET", "/me/notification-preferences"): Access.LOGGED_IN,

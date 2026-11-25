@@ -1,3 +1,6 @@
+from datetime import date
+
+from models import Household, Task, User
 from models.enums import UserRole
 
 
@@ -131,3 +134,91 @@ class TestChangePassword:
         )
 
         assert response.status_code == 422
+
+
+def delete_me(client, headers, names=None):
+    body = None if names is None else {"confirm_household_names": names}
+    return client.request("DELETE", "/me", headers=headers, json=body)
+
+
+class TestDeleteMe:
+    def test_deletes_a_parent_who_is_not_an_admin(
+        self, client, db, make_user, make_household, make_kid, auth_headers
+    ):
+        mom = make_user(email="mom@example.com")
+        dad = make_user(email="dad@example.com")
+        household = make_household(mom, dad)
+        make_kid(household)
+        task = Task(
+            household_id=household.id,
+            title="Dishes",
+            reward=5,
+            starts_on=date.today(),
+            created_by=dad.id,
+        )
+        db.add(task)
+        db.commit()
+        headers = auth_headers(dad)
+        dad_id, household_id, task_id = dad.id, household.id, task.id
+
+        response = delete_me(client, headers)
+
+        assert response.status_code == 204
+        db.expire_all()
+        assert db.get(User, dad_id) is None
+        assert db.get(Household, household_id) is not None
+        assert db.get(Task, task_id).created_by is None
+        assert client.get("/me", headers=headers).status_code == 401
+        members = client.get(
+            f"/households/{household_id}/members", headers=auth_headers(mom)
+        ).json()
+        assert [m["user_id"] for m in members if m["role"] == "parent"] == [str(mom.id)]
+
+    def test_admin_of_a_household_with_other_members_gets_409(
+        self, client, db, make_user, make_household, make_kid, auth_headers
+    ):
+        mom = make_user(email="mom@example.com")
+        make_kid(make_household(mom, name="The Capys"))
+
+        response = delete_me(client, auth_headers(mom), ["The Capys"])
+
+        assert response.status_code == 409
+        assert "The Capys" in response.json()["detail"]
+        db.expire_all()
+        assert db.get(User, mom.id) is not None
+
+    def test_needs_the_names_of_households_deleted_with_the_account(
+        self, client, db, make_user, make_household, auth_headers
+    ):
+        mom = make_user(email="mom@example.com")
+        make_household(mom, name="The Capys")
+        make_household(mom, name="Cabin")
+        headers = auth_headers(mom)
+
+        missing = delete_me(client, headers, ["The Capys"])
+        none = delete_me(client, headers)
+
+        assert missing.status_code == 422
+        assert '"Cabin"' in missing.json()["detail"]
+        assert '"The Capys"' not in missing.json()["detail"]
+        assert none.status_code == 422
+        db.expire_all()
+        assert db.get(User, mom.id) is not None
+
+    def test_deletes_households_where_the_admin_is_alone(
+        self, client, db, make_user, make_household, auth_headers
+    ):
+        mom = make_user(email="mom@example.com")
+        dad = make_user(email="dad@example.com")
+        alone = make_household(mom, name="Cabin")
+        shared = make_household(dad, mom, name="Dad's")
+        ids = mom.id, alone.id, shared.id
+
+        response = delete_me(client, auth_headers(mom), ["Cabin"])
+
+        assert response.status_code == 204
+        db.expire_all()
+        mom_id, alone_id, shared_id = ids
+        assert db.get(User, mom_id) is None
+        assert db.get(Household, alone_id) is None
+        assert db.get(Household, shared_id) is not None

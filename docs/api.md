@@ -238,12 +238,16 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 |---|---|---|---|
 | GET | `/me` | logged in | implemented |
 | PATCH | `/me` | logged in | implemented |
+| DELETE | `/me` | parent account | implemented |
 | PUT | `/me/password` | logged in | implemented |
 | GET | `/me/households` | logged in | implemented |
 | GET | `/me/notification-preferences` | logged in | implemented |
 | PUT | `/me/notification-preferences` | logged in | implemented |
 
 - `PATCH /me` `{display_name?, username?}`. Omitted fields are unchanged; `"username": null` removes the username (`422` if the user has no email, since they could no longer log in). Usernames are 3 to 50 characters of `a-z 0-9 _ . -` and are stored in lowercase. `409` if the username is taken. Changing the email is not supported yet.
+- `DELETE /me` `{confirm_household_names?}` → `204`. Deletes the caller's parent account with its sessions, memberships, notifications and notification preferences. Records the parent created or reviewed stay, with `created_by`, `reviewed_by` or `invited_by` set to null. Kid accounts get `403`; a household admin deletes them with `DELETE /households/{hid}/kids/{kid_id}`.
+  - A household where the caller is admin and **has other members** (parents or kids) gives `409`, naming the household. The admin deletes the household or removes its members first, since there is no way yet to hand the admin role to someone else.
+  - A household where the caller is admin and **the only member** is deleted with the account, with everything in it. Its exact name must be in `confirm_household_names` (`422` otherwise, listing the names still to confirm).
 - `PUT /me/password` `{current_password?, new_password}` → `204`. `current_password` is required when a password is already set; a missing or wrong one gives `422`. Revokes the user's other sessions.
 - `GET /me/households` → `[{id, name, timezone, is_admin}]`, the households the user belongs to, sorted by name.
 - `GET /me/notification-preferences` → `[{type, channel, enabled}]` for every type sent to the caller's account type and every channel, with defaults filled in. `PUT` takes `{preferences: [{type, channel, enabled}]}` (up to 50), saves them and returns the full list. A type that is not sent to the caller's account type gives `422`. Only choices that differ from the default are stored.
@@ -262,7 +266,7 @@ Limits are counted in the `rate_limit_events` table, so they hold across server 
 - `POST /households` `{name, timezone}` → `201`. The caller becomes the admin. `timezone` must be a valid IANA name such as `Europe/Stockholm`.
 - `GET /households/{hid}` → `{id, name, timezone}`.
 - `PATCH /households/{hid}` `{name?, timezone?}`. Omitted fields are unchanged; `null` gives `422`.
-- `DELETE /households/{hid}` `{confirm_name}` → `204`. `confirm_name` must equal the household name exactly (`422` otherwise). Deletes everything in the household (see database.md).
+- `DELETE /households/{hid}` `{confirm_name}` → `204`. `confirm_name` must equal the household name exactly (`422` otherwise). Deletes everything in the household (see database.md), and the accounts of its kids, since a kid belongs to one household.
 - `GET /households/{hid}/members` → `[{user_id, role, display_name, username, email, is_admin, joined_at}]`, the admin first, then parents, then kids.
 - `DELETE /households/{hid}/members/{user_id}` → `204`. Removes a **parent** from the household. The admin cannot remove themselves (`409`). Kids are removed through the kid endpoints (`422` here). `404` if the user is not a member of this household.
 
