@@ -316,6 +316,7 @@ sequenceDiagram
 | PATCH | `/households/{hid}/kids/{kid_id}` | admin | implemented |
 | DELETE | `/households/{hid}/kids/{kid_id}` | admin | implemented |
 | GET | `/households/{hid}/kids/{kid_id}/transactions` | parent | implemented |
+| GET | `/households/{hid}/transactions` | parent | implemented |
 | POST | `/households/{hid}/kids/{kid_id}/adjustments` | parent | implemented |
 
 A kid logs in with a one-time code if they have an email, or with a username and password if they don't (or either, if they have both). An email is added only after the code sent to it is entered, so every email on an account is verified:
@@ -347,6 +348,7 @@ Without this check a parent could set an address they don't own, and its owner w
 - `PATCH /kids/{kid_id}` `{display_name?, username?, password?, email?, code?}`. Omitted fields are unchanged. A new `email` needs a `code` from `POST /kids/email-code`. `"email": null` or `"username": null` removes it, as long as the kid can still log in (`422` otherwise). `null` for `display_name` or `password` gives `422`. Setting `password` revokes the kid's sessions.
 - `DELETE /kids/{kid_id}` → `204`. Removes the kid from this household, with their assignments, submissions, claims, credits and notifications here (and parents' notifications about them). A kid belongs to one household, so the account is deleted too.
 - `GET /transactions` → paginated credit log for this household, newest first. Each entry is `{id, amount, kind, note, task_submission_id, task_title, prize_claim_id, prize_name, created_by, created_by_name, created_at}`; `kind` is `task_reward`, `prize_claim` or `manual_adjustment`.
+- `GET /households/{hid}/transactions` → the credit log of every kid in the household, paginated, newest first, for the parent dashboard's coin history. Entries are the same as above plus `kid_id` and `kid_display_name`. Filters: `?kid_id=` and `?kind=` (`task_reward`, `prize_claim` or `manual_adjustment`; any other value gives `422`). A `kid_id` that is not a kid of this household returns an empty list.
 - `POST /adjustments` `{amount, note}` → `201` with the new entry. `amount` is a non-zero integer from -1,000,000 to 1,000,000, positive to add and negative to remove credits. `note` (1 to 500 characters) tells the kid why. A balance may go negative. The kid gets a `credits_adjusted` notification.
 
 ### Tasks

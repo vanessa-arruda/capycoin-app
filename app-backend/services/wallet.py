@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from core import clock
@@ -18,7 +18,11 @@ from models import (
 )
 from models.enums import CreditTransactionKind, NotificationType, ReviewStatus
 from schemas.common import Page, PageParams
-from schemas.wallet import TransactionResponse, WeekTotals
+from schemas.wallet import (
+    HouseholdTransactionResponse,
+    TransactionResponse,
+    WeekTotals,
+)
 from services import notifications
 from services.pagination import paginate
 
@@ -125,15 +129,10 @@ def transaction_response(entry: CreditTransaction) -> TransactionResponse:
     )
 
 
-def list_transactions(
-    db: Session, household_id: uuid.UUID, kid_id: uuid.UUID, page: PageParams
-) -> Page[TransactionResponse]:
-    query = (
+def _transactions_query(household_id: uuid.UUID) -> Select[tuple[CreditTransaction]]:
+    return (
         select(CreditTransaction)
-        .where(
-            CreditTransaction.household_id == household_id,
-            CreditTransaction.kid_id == kid_id,
-        )
+        .where(CreditTransaction.household_id == household_id)
         .options(
             joinedload(CreditTransaction.task_submission).joinedload(
                 TaskSubmission.task
@@ -142,9 +141,42 @@ def list_transactions(
             joinedload(CreditTransaction.creator),
         )
     )
+
+
+def list_transactions(
+    db: Session, household_id: uuid.UUID, kid_id: uuid.UUID, page: PageParams
+) -> Page[TransactionResponse]:
+    query = _transactions_query(household_id).where(CreditTransaction.kid_id == kid_id)
     entries, next_before = paginate(db, query, CreditTransaction.id, page)
     return Page(
         items=[transaction_response(e) for e in entries], next_before=next_before
+    )
+
+
+def list_household_transactions(
+    db: Session,
+    household_id: uuid.UUID,
+    page: PageParams,
+    kid_id: uuid.UUID | None = None,
+    kind: CreditTransactionKind | None = None,
+) -> Page[HouseholdTransactionResponse]:
+    """Every kid's credit log in the household, newest first."""
+    query = _transactions_query(household_id).options(joinedload(CreditTransaction.kid))
+    if kid_id is not None:
+        query = query.where(CreditTransaction.kid_id == kid_id)
+    if kind is not None:
+        query = query.where(CreditTransaction.kind == kind)
+    entries, next_before = paginate(db, query, CreditTransaction.id, page)
+    return Page(
+        items=[
+            HouseholdTransactionResponse(
+                **transaction_response(e).model_dump(),
+                kid_id=e.kid_id,
+                kid_display_name=e.kid.display_name,
+            )
+            for e in entries
+        ],
+        next_before=next_before,
     )
 
 

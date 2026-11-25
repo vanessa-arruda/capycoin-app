@@ -29,6 +29,11 @@ class TransactionResponse(BaseModel):
     created_at: datetime
 
 
+class HouseholdTransactionResponse(TransactionResponse):
+    kid_id: uuid.UUID
+    kid_display_name: str
+
+
 class WeekTotals(BaseModel):
     # Monday of this week in the household's timezone.
     start: date

@@ -75,6 +75,7 @@ ROUTES = {
     ("PATCH", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
     ("DELETE", "/households/{household_id}/prizes/{prize_id}"): Access.PARENT,
     ("GET", "/households/{household_id}/kids/{kid_id}/transactions"): Access.PARENT,
+    ("GET", "/households/{household_id}/transactions"): Access.PARENT,
     ("POST", "/households/{household_id}/kids/{kid_id}/adjustments"): Access.PARENT,
     ("GET", "/households/{household_id}/task-submissions"): Access.PARENT,
     (

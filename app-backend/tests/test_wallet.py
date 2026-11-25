@@ -143,3 +143,75 @@ class TestTransactions:
         ).json()
 
         assert [t["amount"] for t in first["items"] + second["items"]] == [3, 2, 1]
+
+
+class TestHouseholdTransactions:
+    @pytest.fixture
+    def url(self, household):
+        return f"/households/{household.id}/transactions"
+
+    @pytest.fixture
+    def theo(self, make_kid, household):
+        return make_kid(household, username="theo", display_name="Theo")
+
+    def test_lists_every_kids_credits_with_their_names(
+        self, client, db, household, url, headers, mom, lia, theo
+    ):
+        fill_wallet(db, household, lia, mom)
+        adjust(client, f"/households/{household.id}/kids/{theo.id}", headers, 7)
+
+        body = client.get(url, headers=headers).json()
+
+        assert [
+            (t["kid_id"], t["kid_display_name"], t["kind"], t["amount"])
+            for t in body["items"]
+        ] == [
+            (str(theo.id), theo.display_name, "manual_adjustment", 7),
+            (str(lia.id), lia.display_name, "manual_adjustment", 3),
+            (str(lia.id), lia.display_name, "prize_claim", -4),
+            (str(lia.id), lia.display_name, "task_reward", 10),
+        ]
+        assert body["items"][-1]["task_title"] == "Dishes"
+        assert body["next_before"] is None
+
+    def test_filters_by_kid_and_kind(
+        self, client, db, household, url, headers, mom, lia, theo
+    ):
+        fill_wallet(db, household, lia, mom)
+        fill_wallet(db, household, theo, mom)
+
+        def amounts(**params):
+            body = client.get(url, headers=headers, params=params).json()
+            return [(t["kid_id"], t["amount"]) for t in body["items"]]
+
+        assert amounts(kid_id=str(theo.id)) == [
+            (str(theo.id), 3),
+            (str(theo.id), -4),
+            (str(theo.id), 10),
+        ]
+        assert amounts(kind="prize_claim") == [(str(theo.id), -4), (str(lia.id), -4)]
+        assert amounts(kid_id=str(lia.id), kind="task_reward") == [(str(lia.id), 10)]
+
+    def test_rejects_an_unknown_kind(self, client, url, headers):
+        response = client.get(url, headers=headers, params={"kind": "gift"})
+
+        assert response.status_code == 422
+
+    def test_only_this_households_credits(
+        self, client, db, url, headers, lia, make_user, make_household
+    ):
+        dad = make_user(email="dad@example.com")
+        fill_wallet(db, make_household(dad, name="Dad's"), lia, dad)
+
+        assert client.get(url, headers=headers).json()["items"] == []
+
+    def test_pages(self, client, url, kid_url, headers):
+        for amount in (1, 2, 3):
+            adjust(client, kid_url, headers, amount)
+
+        first = client.get(url, headers=headers, params={"limit": 2}).json()
+        second = client.get(
+            url, headers=headers, params={"limit": 2, "before": first["next_before"]}
+        ).json()
+
+        assert [t["amount"] for t in first["items"] + second["items"]] == [3, 2, 1]

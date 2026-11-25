@@ -5,10 +5,10 @@ Backend work for the app in [frontend-plan.md](frontend-plan.md). The database i
 ## Done
 
 - **Web origin for local development.** `app_url` and `cors_origins` now default to `http://localhost:8081`, the Expo web dev server. Phone apps do not send browser origins, so CORS only matters for the web app.
+- **Household-wide coin history.** `GET /households/{hid}/transactions?kid_id=&kind=` lists every kid's credits for parents, with `kid_id` and `kid_display_name` on each entry.
 
 ## To do: code
 
-- **Household-wide coin history** (needed for frontend step 4). The large-screen parent dashboard shows every kid's coins in one table, filtered by kid and by type (task, prize, adjustment). The backend lists transactions one kid at a time, so it needs `GET /households/{hid}/transactions?kid_id=&kind=` for parents, with `kid_id` and `kid_display_name` on each entry.
 - **Delete your own account** (needed before the app stores). Apple and Google require apps that create accounts to let users delete them from the app. Add `DELETE /me` for parents, with rules for households where the parent is the only admin, and decide how a kid account is deleted (today an admin can delete a kid with `DELETE /households/{hid}/kids/{kid_id}`).
 - **Push notifications** (frontend step 6).
   - A `push_devices` table: user, Expo push token, platform, created and last seen times. A token belongs to one user; registering it again moves it to the new user.

@@ -3,11 +3,30 @@ import uuid
 from fastapi import status
 
 from api.deps import Db, Pagination, ParentMembership, household_router
+from models.enums import CreditTransactionKind
 from schemas.common import Page
-from schemas.wallet import AdjustmentCreate, TransactionResponse
+from schemas.wallet import (
+    AdjustmentCreate,
+    HouseholdTransactionResponse,
+    TransactionResponse,
+)
 from services import kids, wallet
 
 router = household_router("/kids/{kid_id}", tags=["wallet"])
+household = household_router("/transactions", tags=["wallet"])
+
+
+@household.get("")
+def list_household_transactions(
+    membership: ParentMembership,
+    db: Db,
+    page: Pagination,
+    kid_id: uuid.UUID | None = None,
+    kind: CreditTransactionKind | None = None,
+) -> Page[HouseholdTransactionResponse]:
+    return wallet.list_household_transactions(
+        db, membership.household_id, page, kid_id, kind
+    )
 
 
 @router.get("/transactions")
